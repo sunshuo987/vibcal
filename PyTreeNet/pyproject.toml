@@ -1,0 +1,35 @@
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["pytreenet*"]
+
+[project]
+name = "pytreenet"
+version = "1.0.0"
+description = "Tree tensor network library for quantum simulations"
+readme = "README.md"
+authors = [{ name = "Richard M. Milbradt", email = "r.milbradt@tum.de" },
+            { name = "Qunsheng Huang"}]
+license = { text = "European Union Public License, v1.1" }
+requires-python = ">=3.8.10"
+dependencies = [
+    "numpy >= 2.0.0",
+    "scipy >= 1.15.0",
+    "tqdm >= 4.65.0",
+    "h5py >= 3.10.0",
+]
+
+[project.optional-dependencies]
+notebook = ["ipykernel >= 6.24.0",
+            "matplotlib>=3.9.2",
+            ]
+optional_dmrg = ["pyscf >=2.10.0"]
+docs = ["sphinx >= 7.1.2", "sphinxcontrib-napoleon==0.7"]
+tests = ["pytest >= 8.3.3",
+         "coverage >= 7.8.0",
+]
+
+[project.urls]
+Repository = "https://github.com/Drachier/PyTreeNet"

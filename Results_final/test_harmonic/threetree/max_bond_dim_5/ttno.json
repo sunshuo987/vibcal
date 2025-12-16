@@ -1,0 +1,845 @@
+{
+  "root_id": "site64",
+  "orthogonality_center_id": null,
+  "nodes": {
+    "site64": {
+      "identifier": "site64",
+      "parent": null,
+      "children": [
+        "site20",
+        "site21",
+        "site42"
+      ],
+      "shape": [
+        3,
+        3,
+        3,
+        1,
+        1
+      ]
+    },
+    "site20": {
+      "identifier": "site20",
+      "parent": "site64",
+      "children": [
+        "site19"
+      ],
+      "shape": [
+        3,
+        3,
+        8,
+        8
+      ]
+    },
+    "site19": {
+      "identifier": "site19",
+      "parent": "site20",
+      "children": [
+        "site18"
+      ],
+      "shape": [
+        3,
+        3,
+        8,
+        8
+      ]
+    },
+    "site18": {
+      "identifier": "site18",
+      "parent": "site19",
+      "children": [
+        "site17"
+      ],
+      "shape": [
+        3,
+        3,
+        8,
+        8
+      ]
+    },
+    "site17": {
+      "identifier": "site17",
+      "parent": "site18",
+      "children": [
+        "site16"
+      ],
+      "shape": [
+        3,
+        3,
+        8,
+        8
+      ]
+    },
+    "site16": {
+      "identifier": "site16",
+      "parent": "site17",
+      "children": [
+        "site15"
+      ],
+      "shape": [
+        3,
+        3,
+        8,
+        8
+      ]
+    },
+    "site15": {
+      "identifier": "site15",
+      "parent": "site16",
+      "children": [
+        "site14"
+      ],
+      "shape": [
+        3,
+        3,
+        8,
+        8
+      ]
+    },
+    "site14": {
+      "identifier": "site14",
+      "parent": "site15",
+      "children": [
+        "site13"
+      ],
+      "shape": [
+        3,
+        3,
+        8,
+        8
+      ]
+    },
+    "site13": {
+      "identifier": "site13",
+      "parent": "site14",
+      "children": [
+        "site12"
+      ],
+      "shape": [
+        3,
+        3,
+        8,
+        8
+      ]
+    },
+    "site12": {
+      "identifier": "site12",
+      "parent": "site13",
+      "children": [
+        "site11"
+      ],
+      "shape": [
+        3,
+        3,
+        8,
+        8
+      ]
+    },
+    "site11": {
+      "identifier": "site11",
+      "parent": "site12",
+      "children": [
+        "site10"
+      ],
+      "shape": [
+        3,
+        3,
+        8,
+        8
+      ]
+    },
+    "site10": {
+      "identifier": "site10",
+      "parent": "site11",
+      "children": [
+        "site9"
+      ],
+      "shape": [
+        3,
+        3,
+        8,
+        8
+      ]
+    },
+    "site9": {
+      "identifier": "site9",
+      "parent": "site10",
+      "children": [
+        "site8"
+      ],
+      "shape": [
+        3,
+        3,
+        8,
+        8
+      ]
+    },
+    "site8": {
+      "identifier": "site8",
+      "parent": "site9",
+      "children": [
+        "site7"
+      ],
+      "shape": [
+        3,
+        3,
+        8,
+        8
+      ]
+    },
+    "site7": {
+      "identifier": "site7",
+      "parent": "site8",
+      "children": [
+        "site6"
+      ],
+      "shape": [
+        3,
+        3,
+        8,
+        8
+      ]
+    },
+    "site6": {
+      "identifier": "site6",
+      "parent": "site7",
+      "children": [
+        "site5"
+      ],
+      "shape": [
+        3,
+        3,
+        8,
+        8
+      ]
+    },
+    "site5": {
+      "identifier": "site5",
+      "parent": "site6",
+      "children": [
+        "site4"
+      ],
+      "shape": [
+        3,
+        3,
+        8,
+        8
+      ]
+    },
+    "site4": {
+      "identifier": "site4",
+      "parent": "site5",
+      "children": [
+        "site3"
+      ],
+      "shape": [
+        3,
+        3,
+        8,
+        8
+      ]
+    },
+    "site3": {
+      "identifier": "site3",
+      "parent": "site4",
+      "children": [
+        "site2"
+      ],
+      "shape": [
+        3,
+        3,
+        8,
+        8
+      ]
+    },
+    "site2": {
+      "identifier": "site2",
+      "parent": "site3",
+      "children": [
+        "site1"
+      ],
+      "shape": [
+        3,
+        3,
+        8,
+        8
+      ]
+    },
+    "site1": {
+      "identifier": "site1",
+      "parent": "site2",
+      "children": [
+        "site0"
+      ],
+      "shape": [
+        3,
+        3,
+        8,
+        8
+      ]
+    },
+    "site0": {
+      "identifier": "site0",
+      "parent": "site1",
+      "children": [],
+      "shape": [
+        3,
+        8,
+        8
+      ]
+    },
+    "site21": {
+      "identifier": "site21",
+      "parent": "site64",
+      "children": [
+        "site22"
+      ],
+      "shape": [
+        3,
+        3,
+        8,
+        8
+      ]
+    },
+    "site22": {
+      "identifier": "site22",
+      "parent": "site21",
+      "children": [
+        "site23"
+      ],
+      "shape": [
+        3,
+        3,
+        8,
+        8
+      ]
+    },
+    "site23": {
+      "identifier": "site23",
+      "parent": "site22",
+      "children": [
+        "site24"
+      ],
+      "shape": [
+        3,
+        3,
+        8,
+        8
+      ]
+    },
+    "site24": {
+      "identifier": "site24",
+      "parent": "site23",
+      "children": [
+        "site25"
+      ],
+      "shape": [
+        3,
+        3,
+        8,
+        8
+      ]
+    },
+    "site25": {
+      "identifier": "site25",
+      "parent": "site24",
+      "children": [
+        "site26"
+      ],
+      "shape": [
+        3,
+        3,
+        8,
+        8
+      ]
+    },
+    "site26": {
+      "identifier": "site26",
+      "parent": "site25",
+      "children": [
+        "site27"
+      ],
+      "shape": [
+        3,
+        3,
+        8,
+        8
+      ]
+    },
+    "site27": {
+      "identifier": "site27",
+      "parent": "site26",
+      "children": [
+        "site28"
+      ],
+      "shape": [
+        3,
+        3,
+        8,
+        8
+      ]
+    },
+    "site28": {
+      "identifier": "site28",
+      "parent": "site27",
+      "children": [
+        "site29"
+      ],
+      "shape": [
+        3,
+        3,
+        8,
+        8
+      ]
+    },
+    "site29": {
+      "identifier": "site29",
+      "parent": "site28",
+      "children": [
+        "site30"
+      ],
+      "shape": [
+        3,
+        3,
+        8,
+        8
+      ]
+    },
+    "site30": {
+      "identifier": "site30",
+      "parent": "site29",
+      "children": [
+        "site31"
+      ],
+      "shape": [
+        3,
+        3,
+        8,
+        8
+      ]
+    },
+    "site31": {
+      "identifier": "site31",
+      "parent": "site30",
+      "children": [
+        "site32"
+      ],
+      "shape": [
+        3,
+        3,
+        8,
+        8
+      ]
+    },
+    "site32": {
+      "identifier": "site32",
+      "parent": "site31",
+      "children": [
+        "site33"
+      ],
+      "shape": [
+        3,
+        3,
+        8,
+        8
+      ]
+    },
+    "site33": {
+      "identifier": "site33",
+      "parent": "site32",
+      "children": [
+        "site34"
+      ],
+      "shape": [
+        3,
+        3,
+        8,
+        8
+      ]
+    },
+    "site34": {
+      "identifier": "site34",
+      "parent": "site33",
+      "children": [
+        "site35"
+      ],
+      "shape": [
+        3,
+        3,
+        8,
+        8
+      ]
+    },
+    "site35": {
+      "identifier": "site35",
+      "parent": "site34",
+      "children": [
+        "site36"
+      ],
+      "shape": [
+        3,
+        3,
+        8,
+        8
+      ]
+    },
+    "site36": {
+      "identifier": "site36",
+      "parent": "site35",
+      "children": [
+        "site37"
+      ],
+      "shape": [
+        3,
+        3,
+        8,
+        8
+      ]
+    },
+    "site37": {
+      "identifier": "site37",
+      "parent": "site36",
+      "children": [
+        "site38"
+      ],
+      "shape": [
+        3,
+        3,
+        8,
+        8
+      ]
+    },
+    "site38": {
+      "identifier": "site38",
+      "parent": "site37",
+      "children": [
+        "site39"
+      ],
+      "shape": [
+        3,
+        3,
+        8,
+        8
+      ]
+    },
+    "site39": {
+      "identifier": "site39",
+      "parent": "site38",
+      "children": [
+        "site40"
+      ],
+      "shape": [
+        3,
+        3,
+        8,
+        8
+      ]
+    },
+    "site40": {
+      "identifier": "site40",
+      "parent": "site39",
+      "children": [
+        "site41"
+      ],
+      "shape": [
+        3,
+        3,
+        8,
+        8
+      ]
+    },
+    "site41": {
+      "identifier": "site41",
+      "parent": "site40",
+      "children": [],
+      "shape": [
+        3,
+        8,
+        8
+      ]
+    },
+    "site42": {
+      "identifier": "site42",
+      "parent": "site64",
+      "children": [
+        "site43"
+      ],
+      "shape": [
+        3,
+        3,
+        8,
+        8
+      ]
+    },
+    "site43": {
+      "identifier": "site43",
+      "parent": "site42",
+      "children": [
+        "site44"
+      ],
+      "shape": [
+        3,
+        3,
+        8,
+        8
+      ]
+    },
+    "site44": {
+      "identifier": "site44",
+      "parent": "site43",
+      "children": [
+        "site45"
+      ],
+      "shape": [
+        3,
+        3,
+        8,
+        8
+      ]
+    },
+    "site45": {
+      "identifier": "site45",
+      "parent": "site44",
+      "children": [
+        "site46"
+      ],
+      "shape": [
+        3,
+        3,
+        8,
+        8
+      ]
+    },
+    "site46": {
+      "identifier": "site46",
+      "parent": "site45",
+      "children": [
+        "site47"
+      ],
+      "shape": [
+        3,
+        3,
+        8,
+        8
+      ]
+    },
+    "site47": {
+      "identifier": "site47",
+      "parent": "site46",
+      "children": [
+        "site48"
+      ],
+      "shape": [
+        3,
+        3,
+        8,
+        8
+      ]
+    },
+    "site48": {
+      "identifier": "site48",
+      "parent": "site47",
+      "children": [
+        "site49"
+      ],
+      "shape": [
+        3,
+        3,
+        8,
+        8
+      ]
+    },
+    "site49": {
+      "identifier": "site49",
+      "parent": "site48",
+      "children": [
+        "site50"
+      ],
+      "shape": [
+        3,
+        3,
+        8,
+        8
+      ]
+    },
+    "site50": {
+      "identifier": "site50",
+      "parent": "site49",
+      "children": [
+        "site51"
+      ],
+      "shape": [
+        3,
+        3,
+        8,
+        8
+      ]
+    },
+    "site51": {
+      "identifier": "site51",
+      "parent": "site50",
+      "children": [
+        "site52"
+      ],
+      "shape": [
+        3,
+        3,
+        8,
+        8
+      ]
+    },
+    "site52": {
+      "identifier": "site52",
+      "parent": "site51",
+      "children": [
+        "site53"
+      ],
+      "shape": [
+        3,
+        3,
+        8,
+        8
+      ]
+    },
+    "site53": {
+      "identifier": "site53",
+      "parent": "site52",
+      "children": [
+        "site54"
+      ],
+      "shape": [
+        3,
+        3,
+        8,
+        8
+      ]
+    },
+    "site54": {
+      "identifier": "site54",
+      "parent": "site53",
+      "children": [
+        "site55"
+      ],
+      "shape": [
+        3,
+        3,
+        8,
+        8
+      ]
+    },
+    "site55": {
+      "identifier": "site55",
+      "parent": "site54",
+      "children": [
+        "site56"
+      ],
+      "shape": [
+        3,
+        3,
+        8,
+        8
+      ]
+    },
+    "site56": {
+      "identifier": "site56",
+      "parent": "site55",
+      "children": [
+        "site57"
+      ],
+      "shape": [
+        3,
+        3,
+        8,
+        8
+      ]
+    },
+    "site57": {
+      "identifier": "site57",
+      "parent": "site56",
+      "children": [
+        "site58"
+      ],
+      "shape": [
+        3,
+        3,
+        8,
+        8
+      ]
+    },
+    "site58": {
+      "identifier": "site58",
+      "parent": "site57",
+      "children": [
+        "site59"
+      ],
+      "shape": [
+        3,
+        3,
+        8,
+        8
+      ]
+    },
+    "site59": {
+      "identifier": "site59",
+      "parent": "site58",
+      "children": [
+        "site60"
+      ],
+      "shape": [
+        3,
+        3,
+        8,
+        8
+      ]
+    },
+    "site60": {
+      "identifier": "site60",
+      "parent": "site59",
+      "children": [
+        "site61"
+      ],
+      "shape": [
+        3,
+        3,
+        8,
+        8
+      ]
+    },
+    "site61": {
+      "identifier": "site61",
+      "parent": "site60",
+      "children": [
+        "site62"
+      ],
+      "shape": [
+        3,
+        3,
+        8,
+        8
+      ]
+    },
+    "site62": {
+      "identifier": "site62",
+      "parent": "site61",
+      "children": [
+        "site63"
+      ],
+      "shape": [
+        3,
+        3,
+        8,
+        8
+      ]
+    },
+    "site63": {
+      "identifier": "site63",
+      "parent": "site62",
+      "children": [],
+      "shape": [
+        3,
+        8,
+        8
+      ]
+    }
+  }
+}

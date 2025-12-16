@@ -1,0 +1,267 @@
+{
+  "root_id": "site12",
+  "orthogonality_center_id": "site1",
+  "nodes": {
+    "site1": {
+      "identifier": "site1",
+      "parent": "site21",
+      "children": [],
+      "shape": [
+        20,
+        7
+      ]
+    },
+    "site3": {
+      "identifier": "site3",
+      "parent": "site21",
+      "children": [],
+      "shape": [
+        20,
+        9
+      ]
+    },
+    "site21": {
+      "identifier": "site21",
+      "parent": "site20",
+      "children": [
+        "site1",
+        "site3"
+      ],
+      "shape": [
+        20,
+        20,
+        20,
+        1
+      ]
+    },
+    "site2": {
+      "identifier": "site2",
+      "parent": "site20",
+      "children": [],
+      "shape": [
+        20,
+        9
+      ]
+    },
+    "site20": {
+      "identifier": "site20",
+      "parent": "site19",
+      "children": [
+        "site21",
+        "site2"
+      ],
+      "shape": [
+        20,
+        20,
+        20,
+        1
+      ]
+    },
+    "site11": {
+      "identifier": "site11",
+      "parent": "site22",
+      "children": [],
+      "shape": [
+        20,
+        27
+      ]
+    },
+    "site10": {
+      "identifier": "site10",
+      "parent": "site22",
+      "children": [],
+      "shape": [
+        20,
+        27
+      ]
+    },
+    "site22": {
+      "identifier": "site22",
+      "parent": "site19",
+      "children": [
+        "site10",
+        "site11"
+      ],
+      "shape": [
+        20,
+        20,
+        20,
+        1
+      ]
+    },
+    "site19": {
+      "identifier": "site19",
+      "parent": "site12",
+      "children": [
+        "site20",
+        "site22"
+      ],
+      "shape": [
+        20,
+        20,
+        20,
+        1
+      ]
+    },
+    "site7": {
+      "identifier": "site7",
+      "parent": "site17",
+      "children": [],
+      "shape": [
+        20,
+        7
+      ]
+    },
+    "site6": {
+      "identifier": "site6",
+      "parent": "site17",
+      "children": [],
+      "shape": [
+        20,
+        7
+      ]
+    },
+    "site17": {
+      "identifier": "site17",
+      "parent": "site16",
+      "children": [
+        "site7",
+        "site6"
+      ],
+      "shape": [
+        20,
+        20,
+        20,
+        1
+      ]
+    },
+    "site9": {
+      "identifier": "site9",
+      "parent": "site18",
+      "children": [],
+      "shape": [
+        20,
+        9
+      ]
+    },
+    "site8": {
+      "identifier": "site8",
+      "parent": "site18",
+      "children": [],
+      "shape": [
+        20,
+        9
+      ]
+    },
+    "site18": {
+      "identifier": "site18",
+      "parent": "site16",
+      "children": [
+        "site8",
+        "site9"
+      ],
+      "shape": [
+        20,
+        20,
+        20,
+        1
+      ]
+    },
+    "site16": {
+      "identifier": "site16",
+      "parent": "site13",
+      "children": [
+        "site17",
+        "site18"
+      ],
+      "shape": [
+        20,
+        20,
+        20,
+        1
+      ]
+    },
+    "site4": {
+      "identifier": "site4",
+      "parent": "site15",
+      "children": [],
+      "shape": [
+        20,
+        9
+      ]
+    },
+    "site5": {
+      "identifier": "site5",
+      "parent": "site15",
+      "children": [],
+      "shape": [
+        20,
+        9
+      ]
+    },
+    "site15": {
+      "identifier": "site15",
+      "parent": "site14",
+      "children": [
+        "site5",
+        "site4"
+      ],
+      "shape": [
+        20,
+        20,
+        20,
+        1
+      ]
+    },
+    "site0": {
+      "identifier": "site0",
+      "parent": "site14",
+      "children": [],
+      "shape": [
+        20,
+        9
+      ]
+    },
+    "site14": {
+      "identifier": "site14",
+      "parent": "site13",
+      "children": [
+        "site0",
+        "site15"
+      ],
+      "shape": [
+        20,
+        20,
+        20,
+        1
+      ]
+    },
+    "site13": {
+      "identifier": "site13",
+      "parent": "site12",
+      "children": [
+        "site16",
+        "site14"
+      ],
+      "shape": [
+        20,
+        20,
+        20,
+        1
+      ]
+    },
+    "site12": {
+      "identifier": "site12",
+      "parent": null,
+      "children": [
+        "site19",
+        "site13"
+      ],
+      "shape": [
+        20,
+        20,
+        1
+      ]
+    }
+  }
+}

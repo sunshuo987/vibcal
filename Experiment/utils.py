@@ -1,12 +1,12 @@
 from typing import List, Union, Tuple, Dict, Callable
-from collections import Counter, defaultdict
+from collections import Counter
 import numpy as np
 from fractions import Fraction
 from scipy.special import roots_hermite
-from pytreenet.ttno import TreeTensorNetworkOperator
+from pytreenet.ttno import TreeTensorNetworkOperator, TTNOFinder
 from pytreenet.operators import Hamiltonian, TensorProduct
 from pytreenet.ttns import TreeTensorNetworkState
-from potentials.potential_harmonic import get_potential_energy_harmonic
+from Experiment.potentials.potential_harmonic import get_potential_energy_harmonic
 
 def get_laplacian(xs: np.ndarray) -> np.ndarray:
     """
@@ -165,17 +165,18 @@ def get_name_list_harmonic(num_harmonic_oscillator:int, physical_dim: int=6) -> 
     conversion_dict["I"+str(physical_dim)] = np.eye(physical_dim)
 
     for i in range(num_harmonic_oscillator):
-        name_list.append({"site"+str(i): f"t_{i}"})
-        conversion_dict["t_"+str(i)] = Aij[i,i]*conversion_dict["t"+str(n)]
+        name_list.append({"site"+str(i): f"t{n}", "coeff": Aij[i,i]})
+        
+        # conversion_dict["t_"+str(i)] = conversion_dict["t"+str(n)]
         
     # harmonic part
     for i in range(num_harmonic_oscillator):
-        name_list.append({"site"+str(i): "q"+str(i)+str(i)})
-        conversion_dict["q"+str(i)+str(i)] = Aij[i,i]*conversion_dict["q"+str(n)+"^2"]*0.5
+        name_list.append({"site"+str(i): "q"+str(n)+"^2", "coeff": Aij[i,i]*0.5})
+        # conversion_dict["q"+str(i)+str(i)] = conversion_dict["q"+str(n)+"^2"]
         for j in range(i+1,num_harmonic_oscillator):
-            name_list.append({"site"+str(i): "q"+str(i)+str(j), "site"+str(j): "q"+str(n)})
-            conversion_dict["q"+str(i)+str(j)] = Aij[i,j]*conversion_dict["q"+str(n)]*0.5
-        
+            name_list.append({"site"+str(i): "q"+str(n), "site"+str(j): "q"+str(n), "coeff": Aij[i,j]})
+            # conversion_dict["q"+str(i)+str(j)] = conversion_dict["q"+str(n)]
+   
     return name_list, conversion_dict
 
 def get_simple_harmonic_oscillator_orbitals(num_orb: int, omega: float)->Tuple[np.ndarray, np.ndarray]:
@@ -218,9 +219,6 @@ def get_harmonic_oscillator_orbitals(num_orb: list[int], omega: list[float], orb
         raise ValueError("num_orb and orb_state must have the same length")
     evs = []
     for i in range(len(num_orb)):
-        # for j in range(orb_state.shape[0]):
-        #     ev_i = get_simple_harmonic_oscillator_orbitals(num_orb[i], omega[i])
-        #     evs.append(ev_i[:,orb_state[j][i]])
         ev_i = get_simple_harmonic_oscillator_orbitals(num_orb[i], omega[i])
         ind = list(orb_state[:,i])#;print(ind, ev_i)
         evs.append(ev_i[:,ind])
@@ -363,9 +361,6 @@ def get_energy_clusters(energy: Union[str, List[float]], energy_difference: floa
     if current_cluster:
         clusters.append([i for i, _ in current_cluster])
     return clusters
-    # Map clusters back to original values
-    # result_clusters = [[energy[i] for i in cluster] for cluster in clusters]
-    # return result_clusters
 
 def single_voxel_block_diag(C, d=4):
     """
@@ -380,35 +375,6 @@ def single_voxel_block_diag(C, d=4):
 
     return out
 
-# def inflate_tensor(original: np.ndarray, n: int)->np.ndarray:
-#     """
-#     Inflate a tensor to a higher dimension.
-#     """
-#     orig_shape = original.shape
-#     d = len(orig_shape) - 1
-#     fix = orig_shape[-1]
-
-#     for i in range(d):
-#         if orig_shape[i] > n:
-#             raise ValueError(f"Original dimension {i} is larger than target size n={n}")
-
-#     new_shape = tuple([n] * d + [fix])
-#     inflated = np.zeros(new_shape, dtype=original.dtype)
-
-#     # Build slice for original and for random filling
-#     insert_slices = tuple(slice(0, orig_shape[i]) for i in range(d)) + (slice(None),)
-#     random_slices = tuple(slice(orig_shape[i], n) for i in range(d)) + (slice(None),)
-
-#     # Insert original tensor
-#     inflated[insert_slices] = original
-
-#     # Fill the random block
-#     random_shape = tuple(n - orig_shape[i] for i in range(d)) + (fix,)
-#     inflated[random_slices] = np.random.randn(*random_shape)*1e-2
-
-#     return inflated
-
-
 def get_ttno(N: List[int], state: TreeTensorNetworkState, get_potential_energy: callable, hamiltonian: bool = False) -> TreeTensorNetworkOperator:
     """
     Get the TreeTensorNetworkOperator for the given potential energy function.
@@ -422,41 +388,29 @@ def get_ttno(N: List[int], state: TreeTensorNetworkState, get_potential_energy: 
     ham_terms = [(x,y,z) for (x,y),z in zip(coeffs, terms)]
     ham = Hamiltonian(ham_terms, conversion_dictionary=conversion_dict)
     ham_pad = ham.pad_with_identities(state, symbolic=True)
-    ttno = TreeTensorNetworkOperator.from_hamiltonian(ham_pad, state, dtype=np.float64)
+    ttno = TreeTensorNetworkOperator.from_hamiltonian(ham_pad, state, dtype=np.float64, method=TTNOFinder.SGE)
     if hamiltonian:
         return ttno, ham_pad
     else:
         return ttno
     
-# import os
-# from potentials import get_potential_energy_CH3CN
-# def __main__():
-    # current_dir = os.path.dirname(os.path.abspath(__file__))
-    # file_path = os.path.join(current_dir, "data/harmonic/old_energies.txt")
-    # energy_difference = 0.5
-    # energy_clusters = get_energy_clusters(file_path, energy_difference)
-    # print(energy_clusters)
-    # w_indices = np.array([3065,2297,1413,920,3149,3149,1487,1487,1061,1061,361,361])
-
-    # num_orb = 30
-    # orb_index, orb_state, orb_Es = get_orbitals_indices_first(w_indices, num_orb=num_orb)
-    # for ii in range(num_orb): 
-    #     print("    %d, E: %.9f, orbital:" %(ii, orb_Es[ii]), orbitals_array2str(orb_state[ii]))
-    # ev = get_harmonic_oscillator_orbitals([3,4,5,6,7,8,9,10,11,12,13,14], w_indices, orb_state)
-
-    # result_tensor  = single_voxel_block_diag(ev[11],2)
-    # N = [9,7,9,9,9,9,7,7,9,9,27,27]
-    # terms, conversion_dict = get_name_list(N, get_potential_energy_CH3CN)
-    # new_name_list = [{k: v for k, v in d.items() if k != 'coeff'} for d in terms]
-    # coeffs = [(Fraction(str(np.around(d['coeff'], 4))), str(np.around(d['coeff'], 4))) for d in terms]
-    # terms = [TensorProduct(new_name_list[i]) for i in range(len(new_name_list))]
-    # ham_terms = [(x,y,z) for (x,y),z in zip(coeffs, terms)]
-    # # ham = Hamiltonian(terms, conversion_dictionary=conversion_dict)
-    # print(terms[30:40])
-    # print(new_name_list[30:40])
-    # print(coeffs[30:40])
-    # print(ham_terms[30:40])
-    # print(conversion_dict)
+def get_ttno_harmonic_oscillator(N: List[int], state: TreeTensorNetworkState, omega: np.ndarray, hamiltonian: bool = False) -> TreeTensorNetworkOperator:
+    """
+    Get the TreeTensorNetworkOperator for the harmonic oscillator.
+    """
     
-# if __name__ == "__main__":
-#     __main__()
+    name_list, conversion_dict = get_name_list_harmonic(len(N), N[0])
+    conversion_dict["I1"] = np.eye(1)
+    new_name_list = [{k: v for k, v in d.items() if k != 'coeff'} for d in name_list]
+    coeffs = [(Fraction(str(np.around(d['coeff'], 8))), "1") for d in name_list]
+    terms = [TensorProduct(new_name_list[i]) for i in range(len(new_name_list))]
+    ham_terms = [(x,y,z) for (x,y),z in zip(coeffs, terms)]
+   
+    ham = Hamiltonian(ham_terms, conversion_dictionary=conversion_dict)
+    ham_pad = ham.pad_with_identities(state, symbolic=True)
+    ttno = TreeTensorNetworkOperator.from_hamiltonian(ham_pad, state, dtype=np.float64, method=TTNOFinder.SGE)
+    if hamiltonian:
+        return ttno, ham_pad
+    else:
+        return ttno
+    

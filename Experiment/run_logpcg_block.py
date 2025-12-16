@@ -14,8 +14,7 @@ from pytreenet.dmrg.lobpcg import lobpcg_block, precond_lobpcg
 
 from potentials import get_potential_energy_CH3CN, get_potential_energy_CH3CN_harmonic
 from utils import get_orbitals_indices_first, get_energy_clusters, get_ttno
-from utils_ch3cn import random_mps_harmonic_oscillator_0, random_threetree_harmonic_oscillator_0, random_larsson_tree_harmonic_oscillator_0, random_t3ns_harmonic_oscillator_0
-
+from utils_ch3cn import random_mps_harmonic_oscillator_0, random_threetree_harmonic_oscillator_0, random_leafonly_harmonic_oscillator_0
 
 np.random.seed=42
 
@@ -31,7 +30,7 @@ def run_calculation(state_type='mps', max_bond_dim=10, file_path="./Results/ch3c
 
     omega,_,_ = get_potential_energy_CH3CN_harmonic() # frequency of the harmonic oscillator
     
-    _, orb_state, orb_Es = get_orbitals_indices_first(omega,num_orb=9) # get the orbitals and their harmonic energies
+    _, orb_state, orb_Es = get_orbitals_indices_first(omega,num_orb=84) # get the orbitals and their harmonic energies
     clusters = get_energy_clusters(orb_Es, 0.01, 6) # cluster the energies into groups of states with energy difference less than 0.01 and maximum cluster size of 6
     print("Clusters", clusters)
     
@@ -45,19 +44,18 @@ def run_calculation(state_type='mps', max_bond_dim=10, file_path="./Results/ch3c
         elif state_type == 'threetree':  # threetree
             states.append(random_threetree_harmonic_oscillator_0(N, omega, orb_state[i].reshape(1,-1),node_order))
             states[-1].canonical_form(states[-1].root_id)
-        elif state_type == 'larsson_tree':  # larsson_tree
-            states.append(random_larsson_tree_harmonic_oscillator_0(N, omega, orb_state[i].reshape(1,-1),node_order))
-            states[-1].canonical_form(states[-1].root_id)
-        elif state_type == 't3ns':  # t3ns
-            states.append(random_t3ns_harmonic_oscillator_0(N, omega, orb_state[i].reshape(1,-1),node_order))
+        elif state_type == 'leafonly':  # leafonly
+            states.append(random_leafonly_harmonic_oscillator_0(N, omega, orb_state[i].reshape(1,-1),node_order))
             states[-1].canonical_form(states[-1].root_id)
         else:
             raise ValueError(f"State type {state_type} not supported")
         
     ttno, ham_pad = get_ttno(N, states[0], get_potential_energy_CH3CN, True) # get the TTNO and the Hamiltonian
 
-    # construct the shifted TTNO and the preconditioner
     shift_term = (Fraction(-9), "1", TensorProduct({'site0':'I9','site1':'I7','site2':'I9','site3':'I9','site4':'I9','site5':'I9','site6':'I7','site7':'I7','site8':'I9','site9':'I9','site10':'I27','site11':'I27'}))
+    # shift = 9
+    # ham_pad.conversion_dictionary[f'{shift}I9'] = np.eye(9)*shift
+    # shift_term = TensorProduct({'site0':f'{shift}I9','site1':'I7','site2':'I9','site3':'I9','site4':'I9','site5':'I9','site6':'I7','site7':'I7','site8':'I9','site9':'I9','site10':'I27','site11':'I27'})
     ham_pad.add_term(shift_term)
     ttno_shift = TreeTensorNetworkOperator.from_hamiltonian(ham_pad, states[0], dtype=np.float64)
     precond_func = lambda state, svd_params: precond_lobpcg(ttno_shift, state, svd_params)
@@ -71,12 +69,12 @@ def run_calculation(state_type='mps', max_bond_dim=10, file_path="./Results/ch3c
     file_path = []
     energies = []
     print(f"ttno dims for {state_type}:", ttno.bond_dims().values())
-    state_counter = 0 # 69
+    state_counter = 0 
     for cl in clusters:
         print("cluster", cl, "out of", len(clusters))
         time_start = time.time()
         states_list = [states[c] for c in cl]
-        states_opt_list, energies_i = lobpcg_block(ttno, states_list, precond_func, SVDParameters(max_bond_dim=max_bond_dim, renorm=True, rel_tol=1e-8, total_tol=1e-8), 8, file_path)
+        states_opt_list, energies_i = lobpcg_block(ttno, states_list, precond_func, SVDParameters(max_bond_dim=max_bond_dim, renorm=True, rel_tol=1e-8, total_tol=1e-8), 5, file_path)
         time_end = time.time()
         print(f"Time taken for state {cl} lobpcg_block: {time_end - time_start} seconds")
 
@@ -105,16 +103,24 @@ def run_calculation(state_type='mps', max_bond_dim=10, file_path="./Results/ch3c
 
 def main():
     # Run for both MPS and threetree with separate profiling
-    file_path = "./Results_newww/ch3cn"
-    for max_bond_dim in [5]:
-        for state_type in ['mps', 'threetree', 'larsson_tree', 't3ns']:
-            print(f"\nRunning calculation for {state_type} with max bond dim {max_bond_dim}...")
-            profiler = cProfile.Profile()
-            profiler.enable()        
-            run_calculation(state_type, max_bond_dim=max_bond_dim, file_path=file_path)
-            profiler.disable()
-            profiler.dump_stats(f"{file_path}/{state_type}/max_bond_dim_{max_bond_dim}/profile_output.prof")
-            print(f"Profiling complete for {state_type} with max bond dim {max_bond_dim}. Stats saved to {state_type}/max_bond_dim_{max_bond_dim}/profile_output.prof")
+    file_path = "./Results_final/ch3cn"
+    for max_bond_dim in [8,12]:
+        for state_type in ['mps', 'threetree', 'leafonly']:
+            try:
+                print(f"\nRunning calculation for {state_type} with max bond dim {max_bond_dim}...")
+                profiler = cProfile.Profile()
+                profiler.enable()
+                run_calculation(state_type, max_bond_dim=max_bond_dim, file_path=file_path)
+            except Exception as exc:
+                print(f"[ERROR] {state_type=} {max_bond_dim=}: {exc}")
+            else:
+                profiler.disable()
+                profiler.dump_stats(
+                    f"{file_path}/{state_type}/max_bond_dim_{max_bond_dim}/profile_output.prof"
+                )
+            finally:
+                profiler.disable()
+                print(f"Profiling complete for {state_type} with max bond dim {max_bond_dim}. Stats saved to {file_path}/{state_type}/max_bond_dim_{max_bond_dim}/profile_output.prof")
 
 if __name__ == "__main__":
     main()

@@ -4,8 +4,7 @@ import os
 import numpy as np
 def check_orthogonality(path: str, num_states: int):
     current_dir = os.path.dirname(os.path.abspath(__file__))
-    old_eigenstates_path = [os.path.join(current_dir,'..', f'{path}/inverse_iteration_state_{i}_wresi_20') for i in range(num_states)];print("path", old_eigenstates_path)
-    # old_eigenstates_path = [os.path.join(current_dir,'..', f'{path}/lobpcg_state_{i}') for i in range(num_states)]
+    old_eigenstates_path = [os.path.join(current_dir,'..', f'{path}/lobpcg_state_{i}') for i in range(num_states)]
     old_eigenstates = [TreeTensorNetworkState.load(path) for path in old_eigenstates_path]
     ortho_check = np.zeros((num_states,num_states), dtype=np.float64)
 
@@ -21,10 +20,8 @@ def check_orthogonality(path: str, num_states: int):
 
 def main():
     print(os.getcwd())
-    path = "./Results/ch3cn/mps/max_bond_dim_12/states"
-    # path = "./Results/ch3cn/threetree/max_bond_dim_12/states"
-    # path = "./Results/ch3cn/larsson_tree/max_bond_dim_12/states"
-    num_states = 84
+    path = "./Results_final/test_harmonic/threetree/max_bond_dim_5/states"
+    num_states = 30
     ortho_check = check_orthogonality(path, num_states)
     import matplotlib.pyplot as plt
     plt.imshow((ortho_check), cmap='viridis')

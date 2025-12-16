@@ -8,12 +8,13 @@ from .variational_fitting import VariationalFitting
 from ..util.misc_functions import linear_combination, add, orthogonalise_to, scale
 from ..util.tensor_splitting import SVDParameters
 
-from ..ttns.ttns_ttno.zipup import zipup 
+# from ..ttns.ttns_ttno.zipup import zipup 
+from ..contractions.zipup import zipup 
 from ..contractions.state_operator_contraction import get_matrix_element
 from ..ttno.ttno_class import TTNO
 from ..ttns import TreeTensorNetworkState
 
-def precond_lobpcg(shifted_ttno: TTNO, state: TreeTensorNetworkState, svd_params: SVDParameters, num_sweeps: int=2, max_iter: int=100) -> TreeTensorNetworkState:
+def precond_lobpcg(shifted_ttno: TTNO, state: TreeTensorNetworkState, svd_params: SVDParameters, num_sweeps: int=1, max_iter: int=500) -> TreeTensorNetworkState:
     als = AlternatingLeastSquares(shifted_ttno, state_x = deepcopy(state), state_b = deepcopy(state), num_sweeps=num_sweeps, max_iter=max_iter, svd_params=svd_params, site='one-site', residual_rank=0)
     als.run()    
     return als.state_x
@@ -67,7 +68,7 @@ def lobpcg_single(ttno:TTNO, state_x: TreeTensorNetworkState,precond_func: Calla
    
     return state_x, energy
 
-def lobpcg_block(ttno:TTNO, state_x_list: List[TreeTensorNetworkState],precond_func: Callable, svd_params: SVDParameters, max_iter: int, file_path: List[str], varfit_num_sweeps: int=1) -> Tuple[TreeTensorNetworkState, list[float]]:
+def lobpcg_block(ttno:TTNO, state_x_list: List[TreeTensorNetworkState],precond_func: Callable, svd_params: SVDParameters, max_iter: int, file_path: List[str], varfit_num_sweeps: int=2) -> Tuple[TreeTensorNetworkState, list[float]]:
     n_states = len(state_x_list)
     energies = []
     rayleigh = [state.operator_expectation_value(ttno).real for state in state_x_list]
@@ -117,6 +118,8 @@ def lobpcg_block(ttno:TTNO, state_x_list: List[TreeTensorNetworkState],precond_f
                 state_p = linear_combination(xrp_list[n_states:], ev[n_states:3*n_states,n], svd_params.max_bond_dim, num_sweeps = varfit_num_sweeps)
             if np.linalg.norm(ev[n_states:,n]) < 1e-4:
                 print("Warning: the residual is too small, numerical instability is likely to occur.")
+            # state_p_list_new.append(scale(state_p, 1./np.linalg.norm(ev[n_states:,n])))
+            state_p_list_new.append(state_p)
         state_x_list = state_x_list_new
         state_p_list = state_p_list_new
         rayleigh = ew[:n_states].real 

@@ -185,7 +185,7 @@ def linear_combination(ttns: List[TreeTensorNetworkState],
     abs_coeffs = [abs(coeff) for coeff in coeffs]
     ordering = np.argsort(abs_coeffs)[::-1]
     # Filter out small coefficients using a mask
-    mask = np.array([abs_coeffs[i] >= 1e-4 for i in ordering])
+    mask = np.array([abs_coeffs[i] >= 1e-3 for i in ordering])
     if not mask.any():
         mask[0] = True
     ordering = ordering[mask]
@@ -205,7 +205,7 @@ def linear_combination(ttns: List[TreeTensorNetworkState],
                                 residual_rank=2,
                                 dtype=dtype)
     varfit.run()
-    # varfit.y.normalize()
+    varfit.y.normalize()
     return varfit.y
 
 def add(ttns1: TreeTensorNetworkState,

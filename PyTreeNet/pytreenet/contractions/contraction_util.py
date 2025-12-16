@@ -202,8 +202,7 @@ def contract_all_but_one_neighbour_block_to_ket(ket_tensor: np.ndarray,
 def contract_all_neighbour_blocks_to_ket(ket_tensor: np.ndarray,
                                          ket_node: Node,
                                          partial_tree_cache: PartialTreeCachDict,
-                                         order: Union[None,List[str]] = None,
-                                         output: bool = False
+                                         order: Union[None,List[str]]=None
                                          ) -> np.ndarray:
     """
     Contract all neighbour blocks to the ket tensor.
@@ -216,9 +215,6 @@ def contract_all_neighbour_blocks_to_ket(ket_tensor: np.ndarray,
         order (Union[None,List[str]]): The order in which the neighbour blocks
             should be contracted. If None, the order is simply pulled from the
             node's neighbouring nodes.
-        output (bool): Whether to transpose the resulting tensor as an output
-            tensor to be put back into a TTN, i.e. the phyiscal legs are will
-            be moved to the end of the tensor. Default is False.
 
     Returns:
         np.ndarray: The resulting tensor::
@@ -252,13 +248,8 @@ def contract_all_neighbour_blocks_to_ket(ket_tensor: np.ndarray,
     if order is not None:
         # We have to transpose the resulting tensor to match the order
         # given by the order list.
-        nopen = ket_node.nopen_legs()
-        if output:
-            # Here we need the physical legs to be at the end.
-            tensor_perm = []
-        else:
-            tensor_perm = list(range(nopen))
-        added = nopen
+        tensor_perm = list(range(ket_node.nopen_legs()))
+        added = len(tensor_perm)
         old_indices = {}
         # Find the indices corresponding to a neighbour block in the freshly
         # contracted tensor.
@@ -274,19 +265,7 @@ def contract_all_neighbour_blocks_to_ket(ket_tensor: np.ndarray,
                 errstr = f"Neighbour {neighbour_id} from given order is not a neighbour of the ket node!"
                 raise KeyError(errstr) from e
             tensor_perm.extend(indices)
-        if output:
-            # Add the physical legs at the end.
-            tensor_perm.extend(list(range(nopen)))
-    elif output:
-        # Here we need the physical legs to be at the end.
-        nopen = ket_node.nopen_legs()
-        tensor_perm = []
-        tensor_perm.extend(list(range(nopen, result_tensor.ndim)))
-        tensor_perm.extend(list(range(nopen)))
-    else:
-        # In this case we do not need to permute anything.
-        tensor_perm = list(range(result_tensor.ndim))
-    result_tensor = np.transpose(result_tensor, axes=tensor_perm)
+        result_tensor = np.transpose(result_tensor, axes=tensor_perm)
     return result_tensor
 
 def contract_neighbour_block_to_hamiltonian(hamiltonian_tensor: np.ndarray,

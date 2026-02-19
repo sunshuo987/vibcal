@@ -3,7 +3,8 @@ This module implements the actual quantum circuit.
 """
 from __future__ import annotations
 from abc import ABC, abstractmethod
-from typing import Any
+from typing import Any, Self
+from copy import copy
 
 from ...core.ttn import TreeTensorNetwork
 from ...ttno.ttno_class import TreeTensorNetworkOperator
@@ -11,15 +12,113 @@ from ...ttno.time_dep_ttno import DiscreetTimeTTNO
 from ...ttno.state_diagram import StateDiagram, TTNOFinder
 from ..hamiltonian import Hamiltonian
 from .qgate import (QuantumGate,
+                    QuantumOperation,
+                    ProjectionOperation,
                     InvolutarySingleSiteGate,
                     CNOTGate,
                     QGate,
                     SWAPGate,
                     ToffoliGate,
-                    PhaseGate)
+                    PhaseGate,
+                    Reset)
+from ..measurment import Measurement
 
 
-class QCLevel:
+class AbstractLevel(ABC):
+    """
+    Abstract class for different levels in a quantum circuit.
+
+    This is one level made of uquantum operations
+    """
+
+    def __init__(self) -> None:
+        """
+        Initialize an abstract level.
+        """
+        self.operations: list[QuantumOperation] = []
+        self.qubit_ids: set[str] = set()
+
+    def __str__(self) -> str:
+        """
+        Return a string representation of the abstract level.
+        """
+        ops = {tuple(op.qubit_ids): op.symbol for op in self.operations}
+        return str(ops)
+
+    def num_operations(self) -> int:
+        """
+        Return the number of operations.
+        """
+        return len(self.operations)
+
+    def width(self) -> int:
+        """
+        Return the width, i.e. number of different sites of this level.
+        """
+        return len(self.qubit_ids)
+
+    def acts_on(self, qubit_id: str | list[str]) -> bool:
+        """
+        Check if the level acts on a specific qubit or list of qubits.
+
+        Args:
+            qubit_id (str | list[str]): The ID(s) of the qubit(s) to check.
+
+        Returns:
+            bool: True if the qubit(s) is/are in this level, False otherwise.
+        """
+        if isinstance(qubit_id, str):
+            return qubit_id in self.qubit_ids
+        for qid in qubit_id:
+            if qid not in self.qubit_ids:
+                return False
+        return True
+
+    def add_operation(self, operation: QuantumOperation):
+        """
+        Add a quantum operation to this level.
+
+        Args:
+            operation (QuantumOperation): The quantum operation to add.
+        """
+        self.operations.append(operation)
+        for qubit_id in operation.qubit_ids:
+            if qubit_id in self.qubit_ids:
+                errstr = f"Qubit ID {qubit_id} already exists in this level!"
+                raise ValueError(errstr)
+        self.qubit_ids.update(operation.qubit_ids)
+
+    @abstractmethod
+    def otimes_level(self, 
+                     other: AbstractLevel,
+                     inplace: bool = False
+                     ) -> Self:
+        """
+        Perform the kronecker product of this level with another level.
+
+        Args:
+            other (AbstractLevel): The other level to kronecker product with.
+            inplace (bool): If True, perform the operation in place and
+                return self. If False, return a new AbstractLevel instance.
+        
+        Returns:
+            AbstractLevel: A new AbstractLevel instance containing the
+                kronecker product of the two levels, or self if inplace is True.
+        """
+        pass
+
+    @abstractmethod
+    def compile(self) -> Hamiltonian | Measurement:
+        """
+        Compile the level into a Hamiltonian or Measurement.
+
+        Returns:
+            Hamiltonian | Measurement: The compiled Hamiltonian or Measurement
+                representing the level.
+        """
+        pass
+
+class QCLevel(AbstractLevel):
     """
     Class representing a quantum circuit level.
 
@@ -31,39 +130,25 @@ class QCLevel:
         """
         Initialize a quantum circuit level.
         """
-        self.gates: list[QuantumGate] = []
-        self.qubit_ids: set[str] = set()
+        super().__init__()
+        self.operations: list[QuantumGate]
 
-    def __str__(self) -> str:
+    # Legacy Naming
+    @property
+    def gates(self) -> list[QuantumGate]:
         """
-        Return a string representation of the quantum circuit level.
+        Get the list of quantum gates in this level.
+
+        Returns:
+            list[QuantumGate]: The list of quantum gates in this level.
         """
-        gates = {tuple(gate.qubit_ids): gate.symbol for gate in self.gates}
-        return str(gates)
+        return self.operations
 
     def num_gates(self) -> int:
         """
         Return the number of gates.
         """
-        return len(self.gates)
-
-    def width(self) -> int:
-        """
-        Return the width, i.e. number of different sites of this lebel.
-        """
-        return len(self.qubit_ids)
-
-    def acts_on(self, qubit_id: str) -> bool:
-        """
-        Check if the level acts on a specific qubit.
-
-        Args:
-            qubit_id (str): The ID of the qubit to check.
-
-        Returns:
-            bool: True if the qubit is in this level, False otherwise.
-        """
-        return qubit_id in self.qubit_ids
+        return self.num_operations()
 
     def contains_gate_type(self, symbol: str | QGate) -> bool:
         """
@@ -87,7 +172,7 @@ class QCLevel:
 
         Args:
             gate (QuantumGate): The quantum gate to check.
-        
+
         Returns:
             bool: True if the gate is in this level, False otherwise.
         """
@@ -102,12 +187,7 @@ class QCLevel:
         Args:
             gate (QuantumGate): The quantum gate to add.
         """
-        self.gates.append(gate)
-        for qubit_id in gate.qubit_ids:
-            if qubit_id in self.qubit_ids:
-                errstr = f"Qubit ID {qubit_id} already exists in this level!"
-                raise ValueError(errstr)
-        self.qubit_ids.update(gate.qubit_ids)
+        self.add_operation(gate)
 
     def otimes_level(self,
                      other: QCLevel,
@@ -164,6 +244,117 @@ class QCLevel:
             hamiltonian.add_hamiltonian(gate.get_generator())
         return hamiltonian
 
+    def as_circuit_ttno(self,
+                        ref_tree: TreeTensorNetwork,
+                        method: TTNOFinder = TTNOFinder.SGE
+                        ) -> TreeTensorNetworkOperator:
+        """
+        Convert the quantum circuit level to a TTNO.
+
+        Args:
+            ref_tree (TreeTensorNetwork): The reference tree tensor network
+                to use for the TTNO.
+            method (TTNOFinder): The method to use for finding the
+                tree tensor network operator in the state diagram.
+                Defaults to `TTNOFinder.SGE`.
+
+        Returns:
+            TreeTensorNetworkOperator: The TTNO representing the quantum
+                circuit level as quantum gates. This means the TTNO is
+                applied directly to the qubits.
+        """
+        ham = Hamiltonian()
+        for gate in self.gates:
+            ham = ham.otimes(gate.as_sum_of_products())
+        ham.include_identities()
+        return TreeTensorNetworkOperator.from_hamiltonian(ham,
+                                                          ref_tree,
+                                                          method=method)
+
+    def invert(self) -> Self:
+        """
+        Get the inverse of the quantum circuit level.
+
+        Returns:
+            QCLevel: The inverse of the quantum circuit level.
+        """
+        inverted_level = self.__class__()
+        for gate in self.gates:
+            inverted_gate = gate.invert()
+            inverted_level.add_gate(inverted_gate)
+        inverted_level.qubit_ids = copy(self.qubit_ids)
+        return inverted_level
+
+
+class ProjectionLevel(AbstractLevel):
+    """
+    Class representing a projection level in a quantum circuit.
+
+    A projection level is a collection of projections that act on sites.
+    """
+
+    def __init__(self) -> None:
+        """
+        Initialize a projection level.
+        """
+        super().__init__()
+        self.operations: list[ProjectionOperation]
+
+    def add_projection(self,
+                       projection: ProjectionOperation):
+        """
+        Add a projection operation to this level.
+
+        Args:
+            projection (ProjectionOperation): The projection operation to add.
+        """
+        self.add_operation(projection)
+
+    def num_projections(self) -> int:
+        """
+        Return the number of projections.
+        """
+        return self.num_operations()
+
+    def otimes_level(self,
+                     other: ProjectionLevel,
+                     inplace: bool = False
+                     ) -> ProjectionLevel:
+        """
+        Perform the kronecker product of this level with another projection
+        level.
+
+        Args:
+            other (ProjectionLevel): The other projection level to kronecker
+                product with.
+            inplace (bool): If True, perform the operation in place and
+                return self. If False, return a new ProjectionLevel instance.
+
+        Returns:
+            ProjectionLevel: A new ProjectionLevel instance containing the
+                kronecker product of the two levels, or self if inplace is True.
+        """
+        if inplace:
+            for projection in other.operations:
+                self.add_projection(projection)
+            return self
+        new_level = ProjectionLevel()
+        new_level.otimes_level(self, inplace=True)
+        new_level.otimes_level(other, inplace=True)
+        return new_level
+
+    def compile(self) -> Measurement:
+        """
+        Compile the projection level into a Measurement.
+
+        Returns:
+            Measurement: The compiled Measurement representing the level.
+        """
+        measurement = Measurement.empty()
+        for projection in self.operations:
+            measurement = measurement.otimes(projection.to_measurement())
+        return measurement
+
 
 class AbstractQCircuit(ABC):
     """
@@ -185,15 +376,26 @@ class AbstractQCircuit(ABC):
 
     def depth(self) -> int:
         """
-        Get the depth of the quantum circuit.
+        Get the depth of the quantum circuit including projections.
 
         Returns:
             int: The number of levels in the quantum circuit.
         """
         return len(self.levels)
 
+    def gate_depth(self) -> int:
+        """
+        Get the depth of the quantum circuit excluding projections.
+
+        Returns:
+            int: The number of quantum circuit levels in the quantum circuit.
+        """
+        gate_levels = [level for level in self.levels
+                       if isinstance(level, QCLevel)]
+        return len(gate_levels)
+
     @abstractmethod
-    def add_level(self, level: Any | None = None):
+    def add_level(self, level: Any | None = None, level_kind: type[AbstractLevel] | None = None):
         """
         Add a level to the Qcircuit.
         """
@@ -220,7 +422,9 @@ class AbstractQCircuit(ABC):
             errstr = f"Level index {level_index} out of bounds for circuit with {self.depth()} levels!"
             raise IndexError(errstr)
 
-    def _gate_addition_preparation(self, level_index: int) -> int:
+    def _gate_addition_preparation(self,
+                                   level_index: int,
+                                   level_kind: type[AbstractLevel] | None = None) -> int:
         """
         Prepares the Circuit for adding a gate.
 
@@ -239,15 +443,16 @@ class AbstractQCircuit(ABC):
             else:
                 level_index = 0
         if level_index == self.depth():
-            self.add_level()
+            self.add_level(level_kind=level_kind)
         self._index_level_check(level_index)
         return level_index
+
 
 class QCircuit(AbstractQCircuit):
     """
     Class representing a quantum circuit.
 
-    A quantum circuit is a collection of quantum circuit levels.
+    A quantum circuit is a collection of quantum circuit and projection levels.
     """
 
     def __init__(self) -> None:
@@ -255,7 +460,7 @@ class QCircuit(AbstractQCircuit):
         Initialize a quantum circuit.
         """
         super().__init__()
-        self.levels: list[QCLevel]
+        self.levels: list[AbstractLevel]
 
     def width(self) -> int:
         """
@@ -287,23 +492,41 @@ class QCircuit(AbstractQCircuit):
         """
         if level_index is None:
             for qlevel in self.levels:
-                if qlevel.contains_gate(gate):
+                if isinstance(qlevel, QCLevel) and qlevel.contains_gate(gate):
                     return True
             return False
         self._index_level_check(level_index)
-        return self.levels[level_index].contains_gate(gate)
+        level = self.levels[level_index]
+        if isinstance(level, QCLevel):
+            return level.contains_gate(gate)
+        return False
+
+    def qubit_ids(self) -> set[str]:
+        """
+        Get the set of qubit IDs in the quantum circuit.
+
+        Returns:
+            set[str]: The set of qubit IDs in the quantum circuit.
+        """
+        qubit_ids = set()
+        for level in self.levels:
+            qubit_ids.update(level.qubit_ids)
+        return qubit_ids
 
     def add_level(self,
-                  level: QCLevel | None = None):
+                  level: AbstractLevel | None = None,
+                  level_kind: type[AbstractLevel] = QCLevel):
         """
         Add a quantum circuit level to the circuit.
 
         Args:
-            level (QCLevel): The quantum circuit level to add. If None,
+            level (AbstractLevel | None): The quantum circuit level to add. If None,
                 a new level will be created. Defaults to None.
+            level_kind (type[AbstractLevel]): The kind of level to create if
+                level is None. Defaults to QCLevel.
         """
         if level is None:
-            level = QCLevel()
+            level = level_kind()
         self.levels.append(level)
 
     def add_gate(self,
@@ -321,9 +544,38 @@ class QCircuit(AbstractQCircuit):
 
         Raises:
             IndexError: If the level index is out of bounds.
+            ValueError: If the level at level_index is not a QCLevel.
         """
-        level_index = self._gate_addition_preparation(level_index)
-        self.levels[level_index].add_gate(gate)
+        level_index = self._gate_addition_preparation(level_index, QCLevel)
+        level = self.levels[level_index]
+        if not isinstance(level, QCLevel):
+            errstr = f"Level {level_index} is not a QCLevel!"
+            raise TypeError(errstr)
+        level.add_gate(gate)
+
+    def _add_projection(self,
+                       projection: ProjectionOperation,
+                       level_index: int = -1):
+        """
+        Add a projection operation to the circuit.
+
+        Args:
+            projection (ProjectionOperation): The projection operation to add.
+            level_index (int): The index of the level to add the projection to.
+                If -1, the projection will be added to the last level. If it is
+                one larger than the number of levels, a new level will be
+                created.
+        
+        Raises:
+            IndexError: If the level index is out of bounds.
+            ValueError: If the level at level_index is not a ProjectionLevel.
+        """
+        level_index = self._gate_addition_preparation(level_index, ProjectionLevel)
+        level = self.levels[level_index]
+        if not isinstance(level, ProjectionLevel):
+            errstr = f"Level {level_index} is not a ProjectionLevel!"
+            raise TypeError(errstr)
+        level.add_projection(projection)
 
     def add_qcircuit(self,
                      circuit: QCircuit,
@@ -364,6 +616,50 @@ class QCircuit(AbstractQCircuit):
             compiled_level = level.compile()
             compiled_circuit.add_level(compiled_level)
         return compiled_circuit
+
+    def as_circuit_ttno(self,
+                        ref_tree: TreeTensorNetwork,
+                        method: TTNOFinder = TTNOFinder.SGE
+                        ) -> list[TreeTensorNetworkOperator | Measurement]:
+        """
+        Convert the quantum circuit to a list of TTNOs.
+
+        Args:
+            ref_tree (TreeTensorNetwork): The reference tree tensor network
+                to use for the TTNOs.
+            method (TTNOFinder): The method to use for finding the
+                tree tensor network operators in the state diagrams.
+                Defaults to `TTNOFinder.SGE`.
+
+        Returns:
+            list[TreeTensorNetworkOperator | Measurement]:  A list of TTNOs
+                representing the quantum circuit and measurements.
+
+        """
+        ttnos = []
+        for level in self.levels:
+            if isinstance(level, QCLevel):
+                ttnos.append(level.as_circuit_ttno(ref_tree, method=method))
+            elif isinstance(level, ProjectionLevel):
+                compiled_level = level.compile()
+                ttnos.append(compiled_level)
+        return ttnos
+
+    def invert(self) -> Self:
+        """
+        Get the inverse of the quantum circuit.
+
+        Returns:
+            AbstractQCircuit: The inverse of the quantum circuit.
+        """
+        inverted_circuit = self.__class__()
+        for level in reversed(self.levels):
+            if not hasattr(level, "invert"):
+                errstr = "All levels must support inversion!"
+                raise TypeError(errstr)
+            inverted_level = level.invert()
+            inverted_circuit.add_level(inverted_level)
+        return inverted_circuit
 
     # Utility methods for adding gates
     def add_x(self, qubit_id: str, level_index: int = -1):
@@ -412,6 +708,18 @@ class QCircuit(AbstractQCircuit):
                 Defaults to -1 (last level).
         """
         gate = InvolutarySingleSiteGate.from_enum(QGate.HADAMARD, qubit_id)
+        self.add_gate(gate, level_index)
+
+    def add_identity(self, qubit_id: str, level_index: int = -1):
+        """
+        Add an Identity gate to the circuit.
+
+        Args:
+            qubit_id (str): The ID of the qubit to apply the gate to.
+            level_index (int): The index of the level to add the gate to.
+                Defaults to -1 (last level).
+        """
+        gate = InvolutarySingleSiteGate.from_enum(QGate.IDENTITY, qubit_id)
         self.add_gate(gate, level_index)
 
     def add_cnot(self,
@@ -480,6 +788,36 @@ class QCircuit(AbstractQCircuit):
         gate = PhaseGate(phase, qubit_id)
         self.add_gate(gate, level_index)
 
+    def add_projection(self,
+                       qubit_id: str,
+                       outcome: int,
+                       level_index: int = -1):
+        """
+        Add a projection operation to the circuit.
+
+        Args:
+            qubit_id (str): The ID of the qubit to project.
+            outcome (int): The outcome of the projection (0 or 1).
+            level_index (int): The index of the level to add the projection to.
+                Defaults to -1 (last level).
+        """
+        projection = ProjectionOperation(f"M{outcome}", qubit_id, outcome)
+        self._add_projection(projection, level_index)
+
+    def add_reset(self,
+                  qubit_id: str,
+                  level_index: int = -1):
+        """
+        Add a reset operation to the circuit.
+
+        Args:
+            qubit_id (str): The ID of the qubit to reset.
+            level_index (int): The index of the level to add the reset to.
+                Defaults to -1 (last level).
+        """
+        projection = Reset(qubit_id)
+        self._add_projection(projection, level_index)
+
 class CompiledQuantumCircuit(AbstractQCircuit):
     """
     Class representing a compiled quantum circuit.
@@ -493,7 +831,7 @@ class CompiledQuantumCircuit(AbstractQCircuit):
         Initialize a compiled quantum circuit.
         """
         super().__init__()
-        self.levels: list[Hamiltonian]
+        self.levels: list[Hamiltonian | Measurement]
         self.qubit_ids: set[str] = set()
 
     def width(self,
@@ -513,8 +851,8 @@ class CompiledQuantumCircuit(AbstractQCircuit):
         return self.levels[level_index].system_size()
 
     def close_to(self,
-              other: CompiledQuantumCircuit
-              ) -> bool:
+                 other: CompiledQuantumCircuit
+                 ) -> bool:
         """
         Whether the two compiled quantum circuits are close to each other.
         """
@@ -524,13 +862,19 @@ class CompiledQuantumCircuit(AbstractQCircuit):
             return False
         for i, level in enumerate(self.levels):
             other_level = other.levels[i]
-            if level != other_level:
-                return False
-            if not level.compare_dicts(other_level):
+            if isinstance(level, Measurement) and isinstance(other_level, Measurement):
+                if not level == other_level:
+                    return False
+            elif isinstance(level, Hamiltonian) and isinstance(other_level, Hamiltonian):
+                if level != other_level:
+                    return False
+                if not level.compare_dicts(other_level):
+                    return False
+            else:
                 return False
         return True
 
-    def add_level(self, level: Hamiltonian | None = None):
+    def add_level(self, level: Hamiltonian | Measurement | None = None):
         """
         Add a level to the compiled quantum circuit.
 
@@ -562,7 +906,38 @@ class CompiledQuantumCircuit(AbstractQCircuit):
         """
         level_index = self._gate_addition_preparation(level_index)
         if level_index < self.depth():
-            self.levels[level_index].add_hamiltonian(hamiltonian)
+            level = self.levels[level_index]
+            if isinstance(level, Hamiltonian):
+                level.add_hamiltonian(hamiltonian)
+            else:
+                errstr = f"Level {level_index} is not a Hamiltonian!"
+                raise TypeError(errstr)
+   
+    def add_measurement(self,
+                        measurement: Measurement,
+                        level_index: int = -1):
+        """
+        Add a Measurement to the compiled quantum circuit.
+
+        Args:
+            measurement (Measurement): The Measurement to add.
+            level_index (int): The index of the level to add the Measurement
+                to. If -1, the Measurement will be added to the last level.
+                If it is one larger than the number of levels, a new level
+                will be created.
+
+        Raises:
+            IndexError: If the level index is out of bounds.
+        """
+        level_index = self._gate_addition_preparation(level_index)
+        if level_index < self.depth():
+            level = self.levels[level_index]
+            if isinstance(level, Measurement):
+                level = level.otimes(measurement)
+                self.levels[level_index] = level
+            else:
+                errstr = f"Level {level_index} is not a Measurement!"
+                raise TypeError(errstr)
 
     def add_constant_hamiltonian(self,
                                  hamiltonian: Hamiltonian):
@@ -578,34 +953,10 @@ class CompiledQuantumCircuit(AbstractQCircuit):
         for i in range(self.depth()):
             self.add_hamiltonian(hamiltonian, level_index=i)
 
-    def to_state_diagrams(self,
-                          ref_tree: TreeTensorNetwork,
-                          method=TTNOFinder.SGE
-                          ) -> list[StateDiagram]:
-        """
-        Convert the compiled quantum circuit to a list of state diagrams.
-
-        Args:
-            ref_tree (TreeTensorNetwork): The reference tree tensor network
-                to use for the state diagrams.
-            method (TTNOFinder): The method to use for finding the
-                tree tensor network operators in the state diagrams.
-                Defaults to `TTNOFinder.SGE`.
-
-        Returns:
-            list[StateDiagram]: A list of state diagrams representing the
-                compiled quantum circuit.
-        """
-        hams = [ham.pad_with_identities(ref_tree) for ham in self.levels]
-        for ham in hams:
-            ham.include_identities()
-        return [StateDiagram.from_hamiltonian(ham, ref_tree, method=method)
-                for ham in hams]
-
     def to_ttnos(self,
                  ref_tree: TreeTensorNetwork,
                  method: TTNOFinder = TTNOFinder.SGE
-                 ) -> list[TreeTensorNetworkOperator]:
+                 ) -> list[TreeTensorNetworkOperator | Measurement]:
         """
         Convert the compiled quantum circuit to a list of TTNOs.
 
@@ -617,13 +968,20 @@ class CompiledQuantumCircuit(AbstractQCircuit):
                 Defaults to `TTNOFinder.SGE`.
 
         Returns:
-            list[TreeTensorNetworkOperator]: A list of TTNOs representing
-                the compiled quantum circuit.
+            list[TreeTensorNetworkOperator | Measurement]: A list of TTNOs and measurements
+                representing the compiled quantum circuit.
         """
-        for ham in self.levels:
-            ham.include_identities()
-        return [TreeTensorNetworkOperator.from_hamiltonian(ham, ref_tree, method=method)
-                for ham in self.levels]
+        out = []
+        for level in self.levels:
+            if isinstance(level, Hamiltonian):
+                level.include_identities()
+                ttno = TreeTensorNetworkOperator.from_hamiltonian(level,
+                                                                  ref_tree,
+                                                                  method=method)
+                out.append(ttno)
+            else:
+                out.append(level)
+        return out
 
     def to_time_dep_ttno(self,
                          ref_tree: TreeTensorNetwork,
@@ -646,5 +1004,18 @@ class CompiledQuantumCircuit(AbstractQCircuit):
             DiscreetTimeTTNO: A time-dependent TTNO representing the
                 compiled quantum circuit.
         """
-        ttnos = self.to_ttnos(ref_tree, method=method)
-        return DiscreetTimeTTNO(ttnos, dt=dt)
+        found_ttnos = self.to_ttnos(ref_tree, method=method)
+        length = len(found_ttnos)
+        ttnos: list[TreeTensorNetworkOperator] = []
+        meas: list[Measurement] = []
+        for index, item in enumerate(found_ttnos):
+            if isinstance(item, TreeTensorNetworkOperator):
+                ttnos.append(item)
+                if index < length - 1 and not isinstance(found_ttnos[index + 1], Measurement):
+                    meas.append(Measurement.empty())
+            elif isinstance(item, Measurement):
+                meas.append(item)
+                if index < length - 1 and isinstance(found_ttnos[index + 1], Measurement):
+                    errstr = "Two consecutive Measurements found in compiled quantum circuit!"
+                    raise ValueError(errstr)
+        return DiscreetTimeTTNO(ttnos, dt=dt, measurements=meas)

@@ -20,13 +20,14 @@ def check_orthogonality(path: str, num_states: int):
 
 def main():
     print(os.getcwd())
-    path = "./Results_final/test_harmonic/threetree/max_bond_dim_5/states"
-    num_states = 30
+    # path = "./Results_final/test_harmonic/threetree/max_bond_dim_5/states"
+    path = "./Results_test_3/ch3cn/mps/max_bond_dim_8/states"
+    num_states = 84
     ortho_check = check_orthogonality(path, num_states)
     import matplotlib.pyplot as plt
     plt.imshow((ortho_check), cmap='viridis')
     plt.colorbar()
-    # plt.savefig(f'{path}/../check_ortho_logpcg.png')
+    plt.savefig(f'{path}/../check_ortho_logpcg.png')
     # plt.savefig(f'{path}/../check_ortho_ii.png')
     plt.show()
     

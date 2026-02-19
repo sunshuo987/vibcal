@@ -16,6 +16,8 @@ class DocumentStyle(Enum):
     """
     THESIS = "thesis"
     ARTICLE = "article"
+    PRONE_COLUMN = "single_column"
+    PRTWO_COLUMN = "double_column"
 
 def set_size(width: float | str | DocumentStyle,
              fraction: float = 1,
@@ -38,10 +40,17 @@ def set_size(width: float | str | DocumentStyle,
     # Width of figure (in pts)
     if isinstance(width, str):
         width = DocumentStyle(width)
-    if width == DocumentStyle.THESIS:
+    elif width == DocumentStyle.THESIS:
         width_pt = 483.6969
+    elif width == DocumentStyle.PRONE_COLUMN:
+        width_pt = 505
+    elif width == DocumentStyle.PRTWO_COLUMN:
+        width_pt = 505 / 2
     elif not isinstance(width, DocumentStyle):
         width_pt = width
+    else:
+        errstr = f"Unknown width style {width}!"
+        raise ValueError(errstr)
     fig_width_pt = width_pt * fraction
     # Convert from pt to inches
     inches_per_pt = 1 / 72.27
@@ -93,6 +102,21 @@ def config_matplotlib_to_latex(style: DocumentStyle | str = DocumentStyle.THESIS
             "legend.fontsize": 8,
             "xtick.labelsize": 8,
             "ytick.labelsize": 8
+        }
+    elif style in (DocumentStyle.PRONE_COLUMN, DocumentStyle.PRTWO_COLUMN):
+        tex_fonts = {
+            # Use LaTeX to write all text
+            #"text.usetex": True,
+            "font.family": "serif",
+            "font.serif": "STIX",
+            "mathtext.fontset": "stix",
+            # Use 10pt font in plots, to match 10pt font in document
+            "axes.labelsize": 9,
+            "font.size": 9,
+            # Make the legend/label fonts a little smaller
+            "legend.fontsize": 7,
+            "xtick.labelsize": 7,
+            "ytick.labelsize": 7
         }
     else:
         errstr = f"Unknown style {style}!"

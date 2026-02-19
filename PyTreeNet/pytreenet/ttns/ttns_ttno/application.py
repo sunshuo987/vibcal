@@ -29,10 +29,12 @@ class ApplicationMethod(Enum):
     HALF_DENSITY_MATRIX = "half_density_matrix"
     SRC = "src"
     ZIPUP = "zipup"
+    ZIPUP_CANONICAL = "zipup_canonical"
     VARIATIONAL = "variational"
     ZIPUP_VARIATIONAL = "zipup_variational"
     HALF_DENSITY_MATRIX_VARIATIONAL = "half_density_matrix_variational"
     DIRECT_TRUNCATE = "direct_truncate"
+    DIRECT_TRUNCATE_RANDOM = "direct_truncate_random"
 
     def get_function(self) -> Callable:
         """
@@ -52,6 +54,10 @@ class ApplicationMethod(Enum):
         if self == ApplicationMethod.ZIPUP:
             # Annoyingly, zipup has a different signature than the other application methods.
             return lambda ttns, ttno, *args, **kwargs: zipup(ttno, ttns, *args, **kwargs)
+        if self == ApplicationMethod.ZIPUP_CANONICAL:
+            return lambda ttns, ttno, *args, **kwargs: zipup(ttno, ttns, *args,
+                                                             canonicalize=True,
+                                                             **kwargs)
         if self == ApplicationMethod.VARIATIONAL:
             return variational_ttns_ttno_application
         if self == ApplicationMethod.ZIPUP_VARIATIONAL:
@@ -62,10 +68,34 @@ class ApplicationMethod(Enum):
             return lambda ttns, ttno, *args, **kwargs: apply_and_truncate(ttns,
                                                                            ttno,
                                                                            ApplicationMethod.DIRECT,
-                                                                           TruncationMethod.RECURSIVE,
+                                                                           TruncationMethod.SVD,
                                                                            trunc_args=args,
                                                                            trunc_kwargs=kwargs)
+        if self == ApplicationMethod.DIRECT_TRUNCATE_RANDOM:
+            def random_truncation_method(ttns, ttno, *args, **kwargs):
+                params = kwargs.get("params", SVDParameters())
+                params.random = True
+                kwargs["params"] = params
+                return apply_and_truncate(ttns,
+                                          ttno,
+                                          ApplicationMethod.DIRECT,
+                                          TruncationMethod.SVD,
+                                          trunc_args=args,
+                                          trunc_kwargs=kwargs)
+            return random_truncation_method
         raise ValueError(f"Unknown application method: {self}")
+
+    def can_sum(self) -> bool:
+        """
+        Wether the method can be used to directly sum two TTNS together.
+
+        Notably, they should be able to apply a TTNO on each TTNS and sum
+        during the application, instead of applying the TTNOs and then sum
+        afterwards.
+        """
+        return self in {ApplicationMethod.DENSITY_MATRIX,
+                        ApplicationMethod.HALF_DENSITY_MATRIX,
+                        ApplicationMethod.SRC}
 
 def variational_zipup(ttns: TTNS,
                       ttno: TTNO,
@@ -157,9 +187,9 @@ def apply_and_truncate(ttns: TTNS,
                        ttno: TTNO,
                        app_method: ApplicationMethod,
                        trunc_method: TruncationMethod,
-                       app_args: tuple = (),
+                       app_args: tuple | list | object = (),
                        app_kwargs: dict | None = None,
-                       trunc_args: tuple = (),
+                       trunc_args: tuple | list | object = (),
                        trunc_kwargs: dict | None = None
                        ) -> TTNS:
     """
@@ -188,6 +218,10 @@ def apply_and_truncate(ttns: TTNS,
         app_kwargs = {}
     if trunc_kwargs is None:
         trunc_kwargs = {}
+    if not isinstance(app_args, (tuple, list)):
+        app_args = (app_args,)
+    if not isinstance(trunc_args, (tuple, list)):
+        trunc_args = (trunc_args,)
     # Apply the TTNO to the TTNS
     new_ttns = apply_ttno_to_ttns(ttns, ttno,
                                   app_method,
@@ -196,3 +230,30 @@ def apply_and_truncate(ttns: TTNS,
     truncated_ttns = truncate_ttns(new_ttns, trunc_method,
                                    *trunc_args, **trunc_kwargs)
     return truncated_ttns
+
+def power_of_ttno(ttns: TTNS,
+                  ttno: TTNO,
+                  power: int,
+                  app_method: ApplicationMethod,
+                  *args,
+                  **kwargs) -> TTNS:
+    """
+    Apply a TTNO to a TTNS multiple times.
+
+    Args:
+        ttns (TTNS): The tree tensor network state to which the TTNO is
+            applied.
+        ttno (TTNO): The tree tensor network operator to be applied.
+        power (int): The number of times to apply the TTNO.
+        app_method (ApplicationMethod): The method to use for the application.
+        *args: Additional positional arguments for the application function.
+        **kwargs: Additional keyword arguments for the application function.
+
+    Returns:
+        TTNS: The resulting tree tensor network state after applying the TTNO
+            multiple times.
+    """
+    result = ttns
+    for _ in range(power):
+        result = apply_ttno_to_ttns(result, ttno, app_method, *args, **kwargs)
+    return result

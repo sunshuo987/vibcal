@@ -11,6 +11,7 @@ import numpy as np
 import numpy.typing as npt
 import matplotlib.pyplot as plt
 from matplotlib.axes import Axes
+from h5py import File
 
 from ..line_config import (LineConfig, StyleMapping)
 from ...experiment_util.sim_params import SimulationParameters
@@ -186,6 +187,23 @@ class StandardPlottable(Plottable):
         self.x = np.append(self.x, x)
         self.y = np.append(self.y, y)
 
+    def get_value(self,
+                  x: float
+                  ) -> float | None:
+        """
+        Get the y value corresponding to the given x value.
+
+        Args:
+            x (float): The x value to look for.
+        
+        Returns:
+            float | None: The corresponding y value, or None if not found.
+        """
+        indices = np.where(self.x == x)[0]
+        if len(indices) == 0:
+            return None
+        return self.y[indices[0]]
+
     def sort_by_x(self) -> None:
         """
         Sort the reference results by the x values.
@@ -216,18 +234,45 @@ class StandardPlottable(Plottable):
             return (float("inf"), float("-inf"))
         return (np.min(self.y), np.max(self.y))
 
+    def start_end_difference(self,
+                             absolute: bool = True
+                             ) -> float:
+        """
+        Get the difference between the last and first y values.
+
+        Args:
+            absolute (bool): Whether to return the absolute difference.
+
+        Returns:
+            float: The difference between the last and first y values.
+        """
+        if len(self.y) < 2:
+            return 0.0
+        if absolute:
+            return abs(self.y[-1] - self.y[0])
+        return self.y[-1] - self.y[0]
+
     def plot_on_axis(self,
-                     ax: Axes | None = None):
+                     ax: Axes | None = None,
+                     set_label: bool = True):
         """
         Plot the reference results on the given axes.
 
         Args:
             ax (Axes | None): The matplotlib Axes object to plot on.
                 If None, the current axes will be used.
+            set_label (bool): Whether to set the label for the line based on
+                the line configuration. Defaults to True.
+                This can be used to avoid creating a legend entry for this
+                plottable.
         """
         if ax is None:
             ax = plt.gca()
-        ax.plot(self.x, self.y, **self.line_config.to_kwargs())
+        if set_label:
+            kwargs = self.line_config.to_kwargs()
+        else:
+            kwargs = self.line_config.to_kwargs(exclude={"label"})
+        ax.plot(self.x, self.y, **kwargs)
 
     def apply_numpy_to_y(self,
                          func: Callable[[npt.NDArray[np.floating]],
@@ -305,6 +350,86 @@ class StandardPlottable(Plottable):
                    line_config=LineConfig(),
                    assoc_params=copy(sim_params.to_json_dict())
                    )
+
+    def empty_clone(self) -> Self:
+        """
+        Create an empty clone of this StandardPlottable.
+
+        Returns:
+            StandardPlottable: An empty clone of this StandardPlottable.
+        """
+        return StandardPlottable(x=np.array([], dtype=float),
+                                 y=np.array([], dtype=float),
+                                 line_config=deepcopy(self.line_config),
+                                 assoc_params=copy(self.assoc_params)
+                                 )
+
+    def len(self) -> int:
+        """
+        Get the length of the plottable data.
+
+        Returns:
+            int: The length of the x and y data arrays.
+        """
+        out = len(self.x)
+        assert out == len(self.y)
+        return out
+
+    def truncate(self,
+                 new_length: int
+                 ) -> Self:
+        """
+        Truncate the plottable to the given new length.
+
+        Args:
+            new_length (int): The new length to truncate to.
+
+        Returns:
+            StandardPlottable: The truncated plottable.
+        """
+        newx = self.x[:new_length]
+        newy = self.y[:new_length]
+        return StandardPlottable(x=newx,
+                                 y=newy,
+                                 line_config=deepcopy(self.line_config),
+                                 assoc_params=copy(self.assoc_params)
+                                 )
+
+    def save_to_h5(self, file: str | File):
+        """
+        Save the StandardPlottable to an HDF5 file.
+
+        Args:
+            file (str | File): The path to the HDF5 file or an open h5py File
+                object.
+        """
+        if isinstance(file, str):
+            with File(file, "w") as h5file:
+                self.save_to_h5(h5file)
+        else:
+            file.create_dataset("x", data=self.x)
+            file.create_dataset("y", data=self.y)
+            for key, value in self.assoc_params.items():
+                file.attrs[key] = value
+
+    def interpolate_y(self,
+                      new_x: npt.NDArray[np.floating]
+                      ) -> Self:
+        """
+        Interpolate the y values to the given new x values.
+
+        Args:
+            new_x (npt.NDArray[np.floating]): The new x values to interpolate to.
+        
+        Returns:
+            StandardPlottable: A new StandardPlottable with the interpolated
+                y values.
+        """
+        new_y = np.interp(new_x, self.x, self.y)
+        new = self.empty_clone()
+        new.x = new_x
+        new.y = new_y
+        return new
 
 def combine_equivalent_standard_plottables(x_vals: StandardPlottable,
                                            y_vals: StandardPlottable

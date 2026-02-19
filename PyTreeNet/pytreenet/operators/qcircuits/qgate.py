@@ -8,13 +8,17 @@ from fractions import Fraction
 from enum import Enum
 
 import numpy as np
+from numpy._typing import NDArray
 
 from ..common_operators import (pauli_matrices,
                                 hadamard,
                                 swap_gate,
-                                toffoli_gate)
-from ..hamiltonian import Hamiltonian
+                                toffoli_gate,
+                                projector)
+from ..hamiltonian import Hamiltonian, ONE_SYMBOL
 from ..tensorproduct import TensorProduct
+from ...random.random_matrices import random_unitary_matrix
+from ..measurment import Measurement
 
 if TYPE_CHECKING:
     import numpy.typing as npt
@@ -35,9 +39,9 @@ class QGate(Enum):
     TOFFOLI = "TOFFOLI"
     PHASE = "PHASE"
 
-class QuantumGate(ABC):
+class QuantumOperation(ABC):
     """
-    Abstract base class for quantum gates.
+    Abstract base class for quantum operations.
     """
 
     def __init__(self,
@@ -45,14 +49,36 @@ class QuantumGate(ABC):
                  qubit_ids: list[str]
                  ) -> None:
         """
-        Initialize a quantum gate.
+        Initialize a quantum operation.
 
         Args:
-            symbol (str): The symbol representing the quantum gate.
-            qubit_ids (list[str]): List of qubit IDs that the gate acts on.
+            symbol (str): The symbol representing the quantum operation.
+            qubit_ids (list[str]): List of qubit IDs that the operation acts
+                on.
         """
         self.symbol = symbol
         self.qubit_ids = qubit_ids
+
+    def acts_on(self, qubit_ids: str | list[str]) -> bool:
+        """
+        Check if the quantum operation acts on the given qubit IDs.
+
+        Args:
+            qubit_ids (str | list[str]): The ID or list of IDs of the qubits
+                to check.
+
+        Returns:
+            bool: True if the operation acts on the given qubit IDs, False
+                otherwise.
+        """
+        if isinstance(qubit_ids, str):
+            return qubit_ids in self.qubit_ids
+        return all(qid in self.qubit_ids for qid in qubit_ids)
+
+class QuantumGate(QuantumOperation):
+    """
+    Abstract base class for quantum gates.
+    """
 
     def __eq__(self, other: QuantumGate) -> bool:
         """
@@ -83,21 +109,6 @@ class QuantumGate(ABC):
         """
         raise NotImplementedError("Subclasses must implement this method!")
 
-    def acts_on(self, qubit_ids: str | list[str]) -> bool:
-        """
-        Check if the quantum gate acts on the given qubit IDs.
-
-        Args:
-            qubit_ids (str | list[str]): The ID or list of IDs of the qubits
-                to check.
-
-        Returns:
-            bool: True if the gate acts on the given qubit IDs, False
-                otherwise.
-        """
-        if isinstance(qubit_ids, str):
-            return qubit_ids in self.qubit_ids
-        return all(qid in self.qubit_ids for qid in qubit_ids)
 
     @abstractmethod
     def matrix(self) -> npt.NDArray[np.complex64]:
@@ -107,6 +118,27 @@ class QuantumGate(ABC):
         Returns:
             npt.NDArray[np.complex64]: The matrix representation of the
                 quantum gate.
+        """
+        raise NotImplementedError("Subclasses must implement this method!")
+
+    @abstractmethod
+    def as_sum_of_products(self) -> Hamiltonian:
+        """
+        Represent the quantum gate as a sum of tensor products.
+
+        Returns:
+            Hamiltonian: The sum of tensor products representation of the
+                quantum gate.
+        """
+        raise NotImplementedError("Subclasses must implement this method!")
+
+    @abstractmethod
+    def invert(self) -> Self:
+        """
+        Get the inverse of the quantum gate.
+
+        Returns:
+            QuantumGate: The inverse of the quantum gate.
         """
         raise NotImplementedError("Subclasses must implement this method!")
 
@@ -124,6 +156,21 @@ class SingleQubitGate(QuantumGate):
         """
         super().__init__(symbol, [qubit_id])
         self.qubit_id = qubit_id
+
+    def as_sum_of_products(self) -> Hamiltonian:
+        """
+        Represent the single-qubit gate as a sum of tensor products.
+
+        Returns:
+            Hamiltonian: The sum of tensor products representation of the
+                single-qubit gate.
+        """
+        ham = Hamiltonian()
+        tp = TensorProduct({self.qubit_id: self.symbol})
+        conv_dict = {self.symbol: self.matrix()}
+        ham.add_term((Fraction(1), ONE_SYMBOL, tp))
+        ham.update_mappings(conv_dict, {ONE_SYMBOL: 1})
+        return ham
 
 class InvolutarySingleSiteGate(SingleQubitGate):
     """
@@ -209,8 +256,22 @@ class InvolutarySingleSiteGate(SingleQubitGate):
             return cls(QGate.HADAMARD.value,
                        hadamard(),
                        qubit_id)
+        elif gate_enum == QGate.IDENTITY:
+            return cls(QGate.IDENTITY.value,
+                       np.zeros((2,2), dtype=np.complex64),
+                       qubit_id)
         errstr = f"Invalid Enum for InvolutarySingleSiteGate: {gate_enum}!"
         raise ValueError(errstr)
+
+    def invert(self) -> Self:
+        """
+        Get the inverse of the involutary single-site gate.
+
+        Returns:
+            InvolutarySingleSiteGate: The inverse of the involutary single-site gate.
+        """
+        # For involutary gates, the inverse is the gate itself
+        return self
 
 class PhaseGate(SingleQubitGate):
     """
@@ -308,6 +369,58 @@ class PhaseGate(SingleQubitGate):
             raise ValueError(errstr)
         return cls(phase, qubit_id)
 
+    def invert(self) -> Self:
+        """
+        Get the inverse of the Phase gate.
+
+        Returns:
+            PhaseGate: The inverse of the Phase gate.
+        """
+        return self.__class__(-self.phase, self.qubit_id)
+
+class HaarRandomSingleQubitGate(SingleQubitGate):
+    """
+    A class representing a Haar-random single-qubit gate.
+    """
+
+    def __init__(self,
+                 qubit_id: str,
+                 seed: int | None = None,
+                 symbol: str = ""
+                 ) -> None:
+        """
+        Initialize a Haar-random single-qubit gate.
+
+        Args:
+            qubit_id (str): The ID of the qubit the gate acts on.
+            seed (int | None): An optional seed for reproducibility.
+            symbol (str): An optional symbol representing the gate.
+        """
+        if symbol == "":
+            symbol = f"HaarRandom_{qubit_id}"
+            if seed is not None:
+                symbol += f"_seed{seed}"
+        self.gate_matrix = random_unitary_matrix(size=2, seed=seed)
+        super().__init__(symbol, qubit_id)
+
+    def matrix(self) -> NDArray[np.complexfloating]:
+        return self.gate_matrix
+
+    def get_generator(self) -> Hamiltonian:
+        raise NotImplementedError("Generator for Haar-random gates is not implemented!")
+
+    def invert(self) -> Self:
+        """
+        Get the inverse of the Haar-random single-qubit gate.
+
+        Returns:
+            HaarRandomSingleQubitGate: The inverse of the Haar-random single-qubit gate.
+        """
+        inv_gate = self.__class__(self.qubit_id)
+        inv_gate.gate_matrix = np.conjugate(self.gate_matrix.T)
+        inv_gate.symbol = f"{self.symbol}_inverse"
+        return inv_gate
+
 class CNOTGate(QuantumGate):
     """
     Class for the CNOT gate.
@@ -386,6 +499,30 @@ class CNOTGate(QuantumGate):
                          [0, 0, 0, 1],
                          [0, 0, 1, 0]], dtype=np.complex64)
 
+    def as_sum_of_products(self) -> Hamiltonian:
+        """
+        Represent the CNOT gate as a sum of tensor products.
+
+        Returns:
+            Hamiltonian: The sum of tensor products representation of the
+                CNOT gate.
+        """
+        ham = Hamiltonian()
+        identity = "I2"
+        proj_symbols = ["Proj0", "Proj1"]
+        term1 = (Fraction(1), ONE_SYMBOL, TensorProduct({self.control_qubit_id: proj_symbols[0],
+                                                            self.target_qubit_id: identity}))
+        term2 = (Fraction(1), ONE_SYMBOL, TensorProduct({self.control_qubit_id: proj_symbols[1],
+                                                            self.target_qubit_id: QGate.PAULI_X.value}))
+        ham.add_multiple_terms([term1, term2])
+        conversion_dict = {"I2": np.eye(2, dtype=complex),
+                            QGate.PAULI_X.value: pauli_matrices()[0],
+                            proj_symbols[0]: projector(2,0),
+                            proj_symbols[1]: projector(2,1)}
+        coeffs_map = {ONE_SYMBOL: 1.0+0.0j}
+        ham.update_mappings(conversion_dict, coeffs_map)
+        return ham
+
     @classmethod
     def from_enum(cls,
                   gate_enum: QGate | str,
@@ -410,6 +547,15 @@ class CNOTGate(QuantumGate):
             errstr = f"Invalid Enum for CNOTGate: {gate_enum}!"
             raise ValueError(errstr)
         return cls(control_qubit_id, target_qubit_id)
+
+    def invert(self) -> Self:
+        """
+        Get the inverse of the CNOT gate.
+
+        Returns:
+            CNOTGate: The inverse of the CNOT gate.
+        """
+        return self  # CNOT is its own inverse
 
 class SWAPGate(QuantumGate):
     """
@@ -478,6 +624,36 @@ class SWAPGate(QuantumGate):
         """
         return swap_gate()
 
+    def as_sum_of_products(self) -> Hamiltonian:
+        """
+        Represent the SWAP gate as a sum of tensor products.
+
+        Returns:
+            Hamiltonian: The sum of tensor products representation of the
+                SWAP gate.
+        """
+        ham = Hamiltonian()
+        identity = "I2"
+        pauli_x = QGate.PAULI_X.value
+        pauli_y = QGate.PAULI_Y.value
+        pauli_z = QGate.PAULI_Z.value
+        term1 = (Fraction(1, 2), ONE_SYMBOL, TensorProduct({self.qubit_id1: identity,
+                                                            self.qubit_id2: identity}))
+        term2 = (Fraction(1, 2), ONE_SYMBOL, TensorProduct({self.qubit_id1: pauli_x,
+                                                            self.qubit_id2: pauli_x}))
+        term3 = (Fraction(1, 2), ONE_SYMBOL, TensorProduct({self.qubit_id1: pauli_y,
+                                                            self.qubit_id2: pauli_y}))
+        term4 = (Fraction(1, 2), ONE_SYMBOL, TensorProduct({self.qubit_id1: pauli_z,
+                                                            self.qubit_id2: pauli_z}))
+        ham.add_multiple_terms([term1, term2, term3, term4])
+        conversion_dict = {"I2": np.eye(2, dtype=complex),
+                            QGate.PAULI_X.value: pauli_matrices()[0],
+                            QGate.PAULI_Y.value: pauli_matrices()[1],
+                            QGate.PAULI_Z.value: pauli_matrices()[2]}
+        coeffs_map = {ONE_SYMBOL: 1.0+0.0j}
+        ham.update_mappings(conversion_dict, coeffs_map)
+        return ham
+
     @classmethod
     def from_enum(cls,
                   gate_enum: QGate | str,
@@ -502,6 +678,15 @@ class SWAPGate(QuantumGate):
             errstr = f"Invalid Enum for SWAPGate: {gate_enum}!"
             raise ValueError(errstr)
         return cls(qubit_id1, qubit_id2)
+    
+    def invert(self) -> Self:
+        """
+        Get the inverse of the SWAP gate.
+
+        Returns:
+            SWAPGate: The inverse of the SWAP gate.
+        """
+        return self  # SWAP is its own inverse
 
 class ToffoliGate(QuantumGate):
     """
@@ -592,7 +777,17 @@ class ToffoliGate(QuantumGate):
                 Toffoli gate.
         """
         return toffoli_gate()
-    
+
+    def as_sum_of_products(self) -> Hamiltonian:
+        """
+        Represent the Toffoli gate as a sum of tensor products.
+
+        Returns:
+            Hamiltonian: The sum of tensor products representation of the
+                Toffoli gate.
+        """
+        raise NotImplementedError("ToffoliGate.as_sum_of_products() is not yet implemented!")
+
     @classmethod
     def from_enum(cls,
                   gate_enum: QGate | str,
@@ -620,3 +815,71 @@ class ToffoliGate(QuantumGate):
         return cls(control_qubit_id1,
                    control_qubit_id2,
                    target_qubit_id)
+
+    def invert(self) -> Self:
+        """
+        Get the inverse of the Toffoli gate.
+
+        Returns:
+            ToffoliGate: The inverse of the Toffoli gate.
+        """
+        return self  # Toffoli is its own inverse
+
+class ProjectionOperation(QuantumOperation):
+    """
+    Class for projection operations.
+    """
+
+    def __init__(self,
+                 symbol: str,
+                 qubit_id: str,
+                 outcome: int
+                 ) -> None:
+        """
+        Initialize a projection operation.
+
+        Args:
+            symbol (str): The symbol representing the projection operation.
+            qubit_id (str): The ID of the qubit the projection acts on.
+            outcome (int): The measurement outcome (0 or 1).
+        """
+        super().__init__(symbol, [qubit_id])
+        self.qubit_id = qubit_id
+        self.outcome = outcome
+
+    def matrix(self) -> npt.NDArray[np.complex64]:
+        """
+        Get the matrix representation of the projection operation.
+
+        Returns:
+            npt.NDArray[np.complex64]: The matrix representation of the
+                projection operation.
+        """
+        proj_matrix = projector(2, self.outcome)
+        return proj_matrix
+
+    def to_measurement(self) -> Measurement:
+        """
+        Convert the projection operation to a Measurement instance.
+
+        Returns:
+            Measurement: The corresponding Measurement instance.
+        """
+        measures = {self.qubit_id: self.outcome}
+        return Measurement(measures)
+
+class Reset(ProjectionOperation):
+    """
+    Class for the reset operation.
+    """
+
+    def __init__(self,
+                 qubit_id: str
+                 ) -> None:
+        """
+        Initialize a reset operation.
+
+        Args:
+            qubit_id (str): The ID of the qubit to reset.
+        """
+        super().__init__("RESET", qubit_id, 0)

@@ -61,7 +61,7 @@ def run_calculation(state_type='mps', max_bond_dim=10, file_path="./Results/ch3c
     precond_func = lambda state, svd_params: precond_lobpcg(ttno_shift, state, svd_params)
           
     references = pd.read_csv("./Experiment/ch3cn_ref.csv")
-    ref_energy = references["Energy_Ref"].values
+    ref_energy = references["Energy_Ref"].to_numpy(copy=True)
     ref_energy[1:] = ref_energy[1:] + ref_energy[0]
 
     # file_path = [f"{states_dir}/lobpcg_state_{i}" for i in range(6)]
@@ -103,8 +103,8 @@ def run_calculation(state_type='mps', max_bond_dim=10, file_path="./Results/ch3c
 
 def main():
     # Run for both MPS and threetree with separate profiling
-    file_path = "./Results_final/ch3cn"
-    for max_bond_dim in [8,12]:
+    file_path = "./Results_test_0219/ch3cn"
+    for max_bond_dim in [8, 12]:
         for state_type in ['mps', 'threetree', 'leafonly']:
             try:
                 print(f"\nRunning calculation for {state_type} with max bond dim {max_bond_dim}...")

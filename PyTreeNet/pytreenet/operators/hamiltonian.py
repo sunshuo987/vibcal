@@ -14,7 +14,7 @@ where :math:`A_{i}^{[j]}` is the operator acting on the j-th subsystem of the
 as part of the i-th term of the Hamiltonian.
 """
 from __future__ import annotations
-from typing import Dict, Union, List, Tuple, Callable
+from typing import Dict, Union, List, Tuple, Callable, Self
 from enum import Enum, auto
 from fractions import Fraction
 
@@ -24,6 +24,8 @@ from .operator import NumericOperator
 from .tensorproduct import TensorProduct
 from ..core.ttn import TreeTensorNetwork
 from ..util.ttn_exceptions import NotCompatibleException
+
+ONE_SYMBOL = "1"
 
 class PadMode(Enum):
     """
@@ -70,7 +72,7 @@ class Hamiltonian():
         self.terms = deal_with_term_input(terms)
 
         if coeffs_mapping is None:
-            coeffs_mapping = {"1" : 1}
+            coeffs_mapping = {ONE_SYMBOL : 1}
 
         if conversion_dictionary is None:
             self.conversion_dictionary = {}
@@ -78,7 +80,7 @@ class Hamiltonian():
             self.conversion_dictionary = conversion_dictionary
 
         self.coeffs_mapping = coeffs_mapping
-        coeffs_mapping["1"] = 1  # ensure that the default coefficient is 1
+        coeffs_mapping[ONE_SYMBOL] = 1  # ensure that the default coefficient is 1
 
     def __str__(self) -> str:
         """
@@ -195,7 +197,7 @@ class Hamiltonian():
         if isinstance(term, tuple):
             self.terms.append(term)
         else:
-            self.terms.append((Fraction(1),"1",term))
+            self.terms.append((Fraction(1),ONE_SYMBOL,term))
 
     def add_hamiltonian(self, other: Hamiltonian):
         """
@@ -218,7 +220,7 @@ class Hamiltonian():
             terms (list[TensorProduct]): Terms to be added.
         """
         if all([isinstance(term, TensorProduct) for term in terms]):
-            self.terms.extend([(Fraction(1),"1",term) for term in terms])
+            self.terms.extend([(Fraction(1),ONE_SYMBOL,term) for term in terms])
         else:
             self.terms.extend(terms)
 
@@ -394,7 +396,8 @@ class Hamiltonian():
 
         Args:
             dims (Union[int,list[int]]): The dimensions for which to add the
-                identities.
+                identities. If None, all dimensions that appear in the
+                Hamiltonian will be used. Defaults to None.
             ident_creation (Callable): The function used to generate an
                 identity. Defaults to numpy's eye function.
         """
@@ -412,6 +415,47 @@ class Hamiltonian():
                 self.conversion_dictionary[f"I{dim}"] = ident_creation(dim)
         else:
             raise TypeError("Dims can only be int or list of int!")
+
+    def otimes(self, other: Hamiltonian) -> Self:
+        """
+        Kronecker product between two Hamiltonians.
+
+        Args:
+            other (Hamiltonian): The other Hamiltonian to perform the
+                Kronecker product with.
+        
+        Returns:
+            Hamiltonian: The resulting Hamiltonian after the Kronecker product.
+        """
+        if len(self.terms) == 0:
+            return self.__class__(other.terms,
+                                  conversion_dictionary=other.conversion_dictionary,
+                                  coeffs_mapping=other.coeffs_mapping)
+        if len(other.terms) == 0:
+            return self.__class__(self.terms,
+                                  conversion_dictionary=self.conversion_dictionary,
+                                  coeffs_mapping=self.coeffs_mapping)
+        new_terms = []
+        new_coeffs_mapping = {}
+        for frac1, coeff1, term1 in self.terms:
+            for frac2, coeff2, term2 in other.terms:
+                new_frac = frac1 * frac2
+                if coeff1 == ONE_SYMBOL and coeff2 == ONE_SYMBOL:
+                    new_coeff = ONE_SYMBOL
+                elif coeff1 == ONE_SYMBOL:
+                    new_coeff = coeff2
+                elif coeff2 == ONE_SYMBOL:
+                    new_coeff = coeff1
+                else:
+                    new_coeff = f"{coeff1}*{coeff2}"
+                new_coeffs_mapping[new_coeff] = self.coeffs_mapping[coeff1] * other.coeffs_mapping[coeff2]
+                new_term = term1.otimes(term2)
+                new_terms.append((new_frac, new_coeff, new_term))
+        new_conversion_dict = self.conversion_dictionary.copy()
+        new_conversion_dict.update(other.conversion_dictionary)
+        return self.__class__(new_terms,
+                              conversion_dictionary=new_conversion_dict,
+                              coeffs_mapping=new_coeffs_mapping)
 
     @staticmethod
     def identity_like(ref_ttn: TreeTensorNetwork,
@@ -439,7 +483,7 @@ class Hamiltonian():
             dims.add(dim)
         ham = Hamiltonian()
         tp = TensorProduct(matrix_dict)
-        ham.add_term((Fraction(scale), "1", tp))
+        ham.add_term((Fraction(scale), ONE_SYMBOL, tp))
         ham.include_identities(list(dims),
                                ident_creation=lambda d: eye(d, dtype=dtype))
         return ham
@@ -463,10 +507,10 @@ def deal_with_term_input(terms: Union[List[Union[Tuple[Fraction, str, TensorProd
     if terms is None:
         return []
     if isinstance(terms, TensorProduct):
-        return [(Fraction(1),"1",terms)]
+        return [(Fraction(1),ONE_SYMBOL,terms)]
     if isinstance(terms, tuple) and len(terms) == 3:
         return [terms]
     for index, term in enumerate(terms):
         if isinstance(term, TensorProduct):
-            terms[index] = (Fraction(1),"1",term)
+            terms[index] = (Fraction(1),ONE_SYMBOL,term)
     return terms

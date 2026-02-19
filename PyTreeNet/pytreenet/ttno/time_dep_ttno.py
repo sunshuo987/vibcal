@@ -6,12 +6,15 @@ from __future__ import annotations
 from typing import List, Iterable
 from abc import ABC, abstractmethod
 from copy import deepcopy
+from enum import Enum
 
 from numpy import ndarray
 
 from .ttno_class import TreeTensorNetworkOperator
 from .hyperedge import HyperEdge
 from ..util.std_utils import int_to_slice
+from ..ttns.ttns import TTNS
+from ..operators.measurment import Measurement
 
 class AbstractTimeDepTTNO(TreeTensorNetworkOperator, ABC):
     """
@@ -56,6 +59,30 @@ class AbstractTimeDepTTNO(TreeTensorNetworkOperator, ABC):
         """
         raise NotImplementedError("This method must be implemented in a subclass!")
 
+    @abstractmethod
+    def modify_state(self, state: TTNS):
+        """
+        Modifies a TTNS in place after evolving the TTNO.
+
+        Args:
+            state: The TTNS state to modify.
+
+        Returns:
+            The modified TTNS state.
+        """
+        raise NotImplementedError("This method must be implemented in a subclass!")
+
+class TimeStepUpdateBool(Enum):
+    """
+    An enum to indicate whether a time step update should occur.
+    """
+    UPDATE = 1
+    NO_UPDATE = 0
+    BEFORE_FINAL_MEASUREMENT = -1
+    AT_FINAL_MEASUREMENT = -2
+    AFTER_FINAL_MEASUREMENT = -3
+
+
 class DiscreetTimeTTNO(AbstractTimeDepTTNO):
     """
     A TTNO that changes completely at discreet time steps.
@@ -63,7 +90,9 @@ class DiscreetTimeTTNO(AbstractTimeDepTTNO):
 
     def __init__(self,
                  ttnos: list[TreeTensorNetworkOperator],
-                 dt: float = 1.0
+                 dt: float = 1.0,
+                 measurements: list[Measurement] | None= None,
+                 measurement_renorm_threshold: float = 1e-13
                  ) -> None:
         """
         Initializes a DiscreetTimeTTNO object.
@@ -74,12 +103,30 @@ class DiscreetTimeTTNO(AbstractTimeDepTTNO):
                 at different time steps.
             dt (float): The time to pass between each switch to the next
                 TreeTensorNetworkOperator. Default is 1.0.
+            measurements (list[dict[str,int]] | None): A list of measurement
+                specifications. Each measurement is a dictionary with keys
+                'node_id' and 'index' specifying where to measure.
+                Default is None.
+            measurement_renorm_threshold (float): The threshold below which
+                a renormalization after measurement is not performed to avoid
+                numerical instabilities. Default is 1e-13.
         """
         super().__init__(ttno=ttnos[0])
         self.ttnos = ttnos
         self.current_time_step = 0
         self.current_time = 0
         self.dt = dt
+        if measurements is None:
+            self.measurements = [Measurement.empty() for _ in ttnos]
+        else:
+            if len(measurements) == len(ttnos) - 1:
+                self.measurements = measurements + [Measurement.empty()]
+            elif len(measurements) != len(ttnos):
+                raise ValueError("The number of measurements must match the "
+                                 "number of TTNOs!")
+            self.measurements = measurements
+        self.measurement_renorm_threshold = measurement_renorm_threshold
+        self._ts_update = TimeStepUpdateBool.NO_UPDATE
 
     def set_ttno_to_time_step(self, time_step: int):
         """
@@ -99,6 +146,28 @@ class DiscreetTimeTTNO(AbstractTimeDepTTNO):
             raise ValueError(f"Time step {time_step} is out of bounds.")
         self._copy_ttno_attributes(self.ttnos[time_step])
 
+    def _should_time_step_update(self) -> TimeStepUpdateBool:
+        """
+        Checks if the TTNO should be updated to the next time step.
+
+        Args:
+            time_step_size: The size of the time step.
+        
+        Returns:
+            TimeStepUpdateBool: An enum indicating whether a time step update
+                should occur.
+        """
+        if self.current_time_step == len(self.ttnos) - 1:
+            if self.current_time >= (self.current_time_step + 1) * self.dt:
+                return TimeStepUpdateBool.AT_FINAL_MEASUREMENT
+            if self._ts_update in {TimeStepUpdateBool.AT_FINAL_MEASUREMENT,
+                                   TimeStepUpdateBool.AFTER_FINAL_MEASUREMENT}:
+                return TimeStepUpdateBool.AFTER_FINAL_MEASUREMENT
+            return TimeStepUpdateBool.BEFORE_FINAL_MEASUREMENT
+        if self.current_time >= (self.current_time_step + 1) * self.dt:
+            return TimeStepUpdateBool.UPDATE
+        return TimeStepUpdateBool.NO_UPDATE
+
     def update(self, time_step_size: float):
         """
         Updates the TTNO to the next time step.
@@ -108,15 +177,30 @@ class DiscreetTimeTTNO(AbstractTimeDepTTNO):
                 dt, the TTNO will be updated multiple times.
 
         """
-        if self.current_time_step == len(self.ttnos) - 1:
-            self.current_time += time_step_size
-            # If we are at the last time step, we do not update anymore.
-            return
         self.current_time += time_step_size
-        if self.current_time >=  (self.current_time_step + 1) * self.dt:
+        self._ts_update = self._should_time_step_update()
+        if self._ts_update is TimeStepUpdateBool.UPDATE:
             # Update the current time step
             self.current_time_step += 1
             self.set_ttno_to_time_step(self.current_time_step)
+
+    def modify_state(self, state):
+        """
+        Modifies a TTNS in place after evolving the TTNO.
+
+        Args:
+            state: The TTNS state to modify.
+        """
+        if self._ts_update is TimeStepUpdateBool.UPDATE:
+            measurement = self.measurements[self.current_time_step - 1]
+            if not measurement.is_empty():
+                state.measurement_projection(measurement,
+                                             renorm_threshold=self.measurement_renorm_threshold)
+        if self._ts_update is TimeStepUpdateBool.AT_FINAL_MEASUREMENT:
+            measurement = self.measurements[-1]
+            if not measurement.is_empty():
+                state.measurement_projection(measurement,
+                                             renorm_threshold=self.measurement_renorm_threshold)
 
     def reset(self):
         """
@@ -256,6 +340,9 @@ class TimeDependentTTNO(AbstractTimeDepTTNO):
         Rests the TTNO to its original value.
         """
         self.reset_tensors()
+
+    def modify_state(self, state):
+        pass
 
 class OriginalValues:
     """

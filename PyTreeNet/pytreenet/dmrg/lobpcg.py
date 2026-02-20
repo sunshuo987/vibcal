@@ -4,7 +4,6 @@ from copy import deepcopy
 from typing import Callable, List, Union, Tuple
 from .als import AlternatingLeastSquares
 from .variational_fitting import VariationalFitting
-from ..ttns.ttns_ttno.src import src_linear_combination, src_ttns_ttno_application, src_addition
 
 from ..util.misc_functions import linear_combination, orthogonalise_gram_schmidt, orthogonalise_to
 from ..util.tensor_splitting import SVDParameters
@@ -13,7 +12,6 @@ from ..ttns.ttns_ttno.zipup import zipup
 from ..contractions.state_operator_contraction import get_matrix_element
 from ..ttno.ttno_class import TTNO
 from ..ttns import TreeTensorNetworkState
-from ..operators.hamiltonian import Hamiltonian
 
 from ..ttns.ttns_ttno.application import apply_and_truncate, ApplicationMethod
 from ..core.truncation.truncating import TruncationMethod
@@ -97,13 +95,16 @@ def lobpcg_block(ttno:TTNO, state_x_list: List[TreeTensorNetworkState],precond_f
     for i in range(max_iter):
         state_r_list = []
         for ix, state_x in enumerate(state_x_list):
-            state_r = apply_and_truncate(state_x, ttno, apply_method, trunc_method, app_args= (svd_params.max_bond_dim * 4,),trunc_args=(svd_params,))
+            state_r = apply_and_truncate(state_x, ttno, apply_method, trunc_method, 
+                                        #  app_kwargs= {'var_svd_params': svd_params, 'zipup_svd_params': svd_params},
+                                         app_args= (svd_params.max_bond_dim*2,), trunc_args=(svd_params,))
             state_r.normalise()
             state_r = add_two_ttns(state_x.scale(-rayleigh[ix], inplace=False), state_r, AdditionMethod.SRC, desired_dimension=svd_params.max_bond_dim*2)
             state_r = svd_truncation(state_r, SVDParameters(svd_params.max_bond_dim, 1e-10, 1e-10))
             state_r.normalise()
             state_r.canonical_form(state_r.root_id)
             state_r = precond_func(state_r, svd_params)
+            state_r.canonical_form(state_r.root_id)
             if len(file_path) > 0:
                 state_r = orthogonalise_to(state_r, file_path, svd_params.max_bond_dim, num_sweeps)
                 state_x = orthogonalise_to(state_x, file_path, svd_params.max_bond_dim, num_sweeps)
@@ -131,12 +132,12 @@ def lobpcg_block(ttno:TTNO, state_x_list: List[TreeTensorNetworkState],precond_f
         state_x_list_new = []
         state_p_list_new = []
         for n in range(n_states):
-            state_x = linear_combination(xrp_list, ev[:3*n_states,n], int(svd_params.max_bond_dim), num_sweeps = num_sweeps)
+            state_x = linear_combination(xrp_list, ev[:3*n_states,n], int(svd_params.max_bond_dim), num_sweeps = num_sweeps, method='src')
             state_x_list_new.append(state_x)
             if state_p_list is None:
-                state_p = linear_combination(state_r_list, ev[n_states:,n], int(svd_params.max_bond_dim), num_sweeps = num_sweeps)
+                state_p = linear_combination(state_r_list, ev[n_states:,n], int(svd_params.max_bond_dim), num_sweeps = num_sweeps, method='src')
             else:
-                state_p = linear_combination(xrp_list[n_states:], ev[n_states:3*n_states,n], svd_params.max_bond_dim, num_sweeps = num_sweeps)
+                state_p = linear_combination(xrp_list[n_states:], ev[n_states:3*n_states,n], svd_params.max_bond_dim, num_sweeps = num_sweeps, method='src')
             state_p_list_new.append(state_p)
         state_x_list = state_x_list_new
         state_p_list = state_p_list_new

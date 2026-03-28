@@ -4,7 +4,8 @@ from pytreenet.core.node import Node
 from pytreenet.random.random_node import random_tensor_node
 from pytreenet.ttns import TTNS
 from pytreenet.util.tensor_splitting import SplitMode
-from Experiment.utils import get_harmonic_oscillator_orbitals, single_voxel_block_diag
+from pytreenet.special_ttn import ForkTreeProductState
+from utils import get_harmonic_oscillator_orbitals, single_voxel_block_diag
 
 def create_node_mapping(node_order: list) -> dict:
     """
@@ -351,6 +352,256 @@ def random_threetree_harmonic_oscillator_0(physical_dim: List[int], omega: float
     random_ttns.add_child_to_parent(nodes[node_mapping[9]][0],nodes[node_mapping[9]][1],0,f"site{node_mapping[8]}",1)
     random_ttns.add_child_to_parent(nodes[node_mapping[10]][0],nodes[node_mapping[10]][1],0,f"site{node_mapping[9]}",1)
     random_ttns.add_child_to_parent(nodes[node_mapping[11]][0],nodes[node_mapping[11]][1],0,f"site{node_mapping[10]}",1)
+    random_ttns.canonical_form(random_ttns.root_id, mode=SplitMode.KEEP)
+    random_ttns.normalize()
+    return random_ttns
+
+def random_fork_tree(physical_dim: List[int], omega: float, orb_state: List[float], node_order: List[int], dtype: np.dtype = np.float64, nbranch: int=3) -> TTNS:
+    """
+    Generate a random fork tree with given physical dimensions and virtual dimensions.
+    
+    Input:
+        physical_dim: List[int]
+            The physical dimensions of the MPS.
+        omega: float
+            The frequency of the harmonic oscillator.
+        orb_state: List[float]
+            The state of the harmonic oscillator.
+        node_order: List[int]
+            The order of the nodes.
+    Output:
+        random_ttns: MultiTTNS
+            The random TTNS.
+    """
+    nsite = len(physical_dim)
+    sort_idx = np.argsort(node_order)
+    nnpb = nsite//nbranch # number of node per branch
+    remainder = nsite % nbranch
+
+    nneighbour = []
+    for i in range(nbranch-1):
+        nneighbour.extend([2]*(nnpb-1)+[1])
+    nneighbour.extend([2]*(nnpb-1+remainder)+[1])
+    nneighbour = [nneighbour[i] for i in sort_idx]
+    ho_tensors = get_harmonic_oscillator_orbitals(physical_dim, omega, orb_state)
+    m = orb_state.shape[0]
+
+    if orb_state.shape[0] == 1:
+        for i in range(nsite):
+            ho_tensors[i] = ho_tensors[i].reshape(-1,1)
+    for i in range(nsite):
+        ho_tensors[i] = single_voxel_block_diag(ho_tensors[i], nneighbour[i])     
+        ho_tensors[i] = ho_tensors[i].astype(dtype) 
+    sub_tensors=[]
+    sub_id=[]
+    for i in range(nbranch-1):
+        sub_tensors.append(ho_tensors[i*nnpb:(i+1)*nnpb])
+        sub_id.append([f"site{j}" for j in range(i*nnpb,(i+1)*nnpb)])
+    sub_tensors.append(ho_tensors[(nbranch-1)*nnpb:])
+    sub_id.append([f"site{j}" for j in range((nbranch-1)*nnpb,nsite)])
+    nodes = [(Node(tensor=ho_tensor, identifier="site"+str(i)), ho_tensor) for i, ho_tensor in enumerate(ho_tensors)]
+    
+    shapes_ancillary = [[m,m,1]]+[[m,m,m,1]]*(nbranch-2)+[[m,m,1]]
+    # nodes.extend([random_tensor_node(shape, identifier="site"+str(i+nsite), dtype=dtype)
+            #  for i, shape in enumerate(shapes_ancillary)])
+    main_tensors = [random_tensor_node(shape, identifier="site"+str(i+nsite), dtype=dtype)[1]
+             for i, shape in enumerate(shapes_ancillary)]
+    node_mapping = create_node_mapping(node_order)
+    main_id = [f"site{nsite+i}" for i in range(nbranch)]
+    random_ttns = ForkTreeProductState.from_tensors(main_tensors, sub_tensors, main_identifier_prefix=main_id, subchain_identifier_prefix=sub_id)
+    # random_ttns.root_id = 'main_0'
+    random_ttns.canonical_form(random_ttns.root_id, mode=SplitMode.KEEP)
+    random_ttns.normalize()
+    return random_ttns
+
+def random_t3ns_harmonic_oscillator(physical_dim: List[int], omega: float, orb_state: List[float], node_order: List[int], dtype: np.dtype = np.float64, nbranch: int=3) -> TTNS:
+    """
+    Generate a random t3ns with given physical dimensions and virtual dimensions.
+    
+    Input:
+        physical_dim: List[int]
+            The physical dimensions of the MPS.
+        virtual_dim: int
+            The virtual dimensions of the MPS.
+        weights: List[float]
+            The weights of the MPS.
+        node_order: List[int]
+            The order of the nodes.
+    Output:
+        random_ttns: MultiTTNS
+            The random TTNS.
+    """    
+    nsite = len(physical_dim)
+    sort_idx = np.argsort(node_order)
+    nneighbour = [2,2,1,1,2,1,1,2,1,1,2,1]
+    nneighbour = [nneighbour[i] for i in sort_idx]
+    ho_tensors = get_harmonic_oscillator_orbitals(physical_dim, omega, orb_state)
+    # ho_tensors = [ho_tensors[i] for i in sort_idx]
+    m = orb_state.shape[0]
+
+    if orb_state.shape[0] == 1:
+        for i in range(nsite):
+            ho_tensors[i] = ho_tensors[i].reshape(-1,1)
+    for i in range(nsite):
+        ho_tensors[i] = single_voxel_block_diag(ho_tensors[i], nneighbour[i])     
+        ho_tensors[i] = ho_tensors[i].astype(dtype) 
+
+    # sort_idx = node_order #np.argsort(node_order)
+    # ho_tensors = [ho_tensors[i] for i in sort_idx]
+    
+    nodes = [(Node(tensor=ho_tensor, identifier="site"+str(i)), ho_tensor) for i, ho_tensor in enumerate(ho_tensors)]
+    
+    shapes_ancillary = [[m,m,m,1],[m,m,m,1],[m,m,m,1],[m,m,m,1],[m,m,m,1],[m,m,1]]
+    nodes.extend([random_tensor_node(shape, identifier="site"+str(i+nsite), dtype=dtype)
+             for i, shape in enumerate(shapes_ancillary)])
+    
+    node_mapping = create_node_mapping(node_order)
+    random_ttns = TTNS()
+    random_ttns.add_root(nodes[node_mapping[0]][0], nodes[node_mapping[0]][1])
+    random_ttns.add_child_to_parent(nodes[12][0], nodes[12][1], 0, f"site{node_mapping[0]}", 0)
+    random_ttns.add_child_to_parent(nodes[node_mapping[1]][0], nodes[node_mapping[1]][1], 0, "site12", 1)
+    random_ttns.add_child_to_parent(nodes[14][0], nodes[14][1], 0, f"site{node_mapping[1]}", 1)
+    random_ttns.add_child_to_parent(nodes[node_mapping[2]][0], nodes[node_mapping[2]][1], 0, "site14", 1)
+    random_ttns.add_child_to_parent(nodes[node_mapping[3]][0], nodes[node_mapping[3]][1], 0, "site14", 2)
+    random_ttns.add_child_to_parent(nodes[node_mapping[4]][0], nodes[node_mapping[4]][1], 0, "site12", 2)
+    random_ttns.add_child_to_parent(nodes[15][0], nodes[15][1], 0, f"site{node_mapping[4]}", 1)
+    random_ttns.add_child_to_parent(nodes[node_mapping[5]][0], nodes[node_mapping[5]][1], 0, "site15", 1)
+    random_ttns.add_child_to_parent(nodes[node_mapping[6]][0], nodes[node_mapping[6]][1], 0, "site15", 2)
+    random_ttns.add_child_to_parent(nodes[13][0], nodes[13][1], 0, f"site{node_mapping[0]}", 1)
+    random_ttns.add_child_to_parent(nodes[node_mapping[7]][0], nodes[node_mapping[7]][1], 0, "site13", 1)
+    random_ttns.add_child_to_parent(nodes[16][0], nodes[16][1], 0, f"site{node_mapping[7]}", 1)
+    random_ttns.add_child_to_parent(nodes[node_mapping[8]][0], nodes[node_mapping[8]][1], 0, "site16", 1)
+    random_ttns.add_child_to_parent(nodes[node_mapping[9]][0], nodes[node_mapping[9]][1], 0, "site16", 2)
+    random_ttns.add_child_to_parent(nodes[node_mapping[10]][0], nodes[node_mapping[10]][1], 0, "site13", 2)
+    random_ttns.add_child_to_parent(nodes[17][0], nodes[17][1], 0, f"site{node_mapping[10]}", 1)
+    random_ttns.add_child_to_parent(nodes[node_mapping[11]][0], nodes[node_mapping[11]][1], 0, "site17", 1)
+    random_ttns.canonical_form(random_ttns.root_id, mode=SplitMode.KEEP)
+    random_ttns.normalize()
+    return random_ttns
+    
+def random_x_harmonic_oscillator(physical_dim: List[int], omega: float, orb_state: List[float], node_order: List[int], dtype: np.dtype = np.float64, nbranch: int=3) -> TTNS:
+    """
+    Generate a random t3ns with given physical dimensions and virtual dimensions.
+    
+    Input:
+        physical_dim: List[int]
+            The physical dimensions of the MPS.
+        virtual_dim: int
+            The virtual dimensions of the MPS.
+        weights: List[float]
+            The weights of the MPS.
+        node_order: List[int]
+            The order of the nodes.
+    Output:
+        random_ttns: MultiTTNS
+            The random TTNS.
+    """    
+    nsite = len(physical_dim)
+    sort_idx = np.argsort(node_order)
+    nneighbour = [2,2,1,2,2,1,2,2,1,2,2,1]
+    nneighbour = [nneighbour[i] for i in sort_idx]
+    ho_tensors = get_harmonic_oscillator_orbitals(physical_dim, omega, orb_state)
+    # ho_tensors = [ho_tensors[i] for i in sort_idx]
+    m = orb_state.shape[0]
+
+    if orb_state.shape[0] == 1:
+        for i in range(nsite):
+            ho_tensors[i] = ho_tensors[i].reshape(-1,1)
+    for i in range(nsite):
+        ho_tensors[i] = single_voxel_block_diag(ho_tensors[i], nneighbour[i])     
+        ho_tensors[i] = ho_tensors[i].astype(dtype) 
+
+    # sort_idx = node_order #np.argsort(node_order)
+    # ho_tensors = [ho_tensors[i] for i in sort_idx]
+    
+    nodes = [(Node(tensor=ho_tensor, identifier="site"+str(i)), ho_tensor) for i, ho_tensor in enumerate(ho_tensors)]
+    
+    shapes_ancillary = [[m,m,m,1],[m,m,m,1]]
+    nodes.extend([random_tensor_node(shape, identifier="site"+str(i+nsite), dtype=dtype)
+             for i, shape in enumerate(shapes_ancillary)])
+    
+    node_mapping = create_node_mapping(node_order)
+    random_ttns = TTNS()
+    random_ttns.add_root(nodes[12][0], nodes[12][1])
+    random_ttns.add_child_to_parent(nodes[13][0], nodes[13][1], 0, "site12", 0)
+    random_ttns.add_child_to_parent(nodes[node_mapping[0]][0], nodes[node_mapping[0]][1],0, "site12", 1)
+    random_ttns.add_child_to_parent(nodes[node_mapping[1]][0], nodes[node_mapping[1]][1], 0, f"site{node_mapping[0]}", 1)
+    random_ttns.add_child_to_parent(nodes[node_mapping[2]][0], nodes[node_mapping[2]][1], 0, f"site{node_mapping[1]}", 1)
+    random_ttns.add_child_to_parent(nodes[node_mapping[3]][0], nodes[node_mapping[3]][1],0, "site12", 2)
+    random_ttns.add_child_to_parent(nodes[node_mapping[4]][0], nodes[node_mapping[4]][1], 0, f"site{node_mapping[3]}", 1)
+    random_ttns.add_child_to_parent(nodes[node_mapping[5]][0], nodes[node_mapping[5]][1], 0, f"site{node_mapping[4]}", 1)
+    random_ttns.add_child_to_parent(nodes[node_mapping[6]][0], nodes[node_mapping[6]][1],0, "site13", 1)
+    random_ttns.add_child_to_parent(nodes[node_mapping[7]][0], nodes[node_mapping[7]][1], 0, f"site{node_mapping[6]}", 1)
+    random_ttns.add_child_to_parent(nodes[node_mapping[8]][0], nodes[node_mapping[8]][1], 0, f"site{node_mapping[7]}", 1)
+    random_ttns.add_child_to_parent(nodes[node_mapping[9]][0], nodes[node_mapping[9]][1],0, "site13", 2)
+    random_ttns.add_child_to_parent(nodes[node_mapping[10]][0], nodes[node_mapping[10]][1], 0, f"site{node_mapping[9]}", 1)
+    random_ttns.add_child_to_parent(nodes[node_mapping[11]][0], nodes[node_mapping[11]][1], 0, f"site{node_mapping[10]}", 1)
+    random_ttns.canonical_form(random_ttns.root_id, mode=SplitMode.KEEP)
+    random_ttns.normalize()
+    return random_ttns
+
+def random_twin_tree_harmonic_oscillator(physical_dim: List[int], omega: float, orb_state: List[float], node_order: List[int], dtype: np.dtype = np.float64, nbranch: int=3) -> TTNS:
+    """
+    Generate a random t3ns with given physical dimensions and virtual dimensions.
+    
+    Input:
+        physical_dim: List[int]
+            The physical dimensions of the MPS.
+        virtual_dim: int
+            The virtual dimensions of the MPS.
+        weights: List[float]
+            The weights of the MPS.
+        node_order: List[int]
+            The order of the nodes.
+    Output:
+        random_ttns: MultiTTNS
+            The random TTNS.
+    """    
+    nsite = len(physical_dim)
+    sort_idx = np.argsort(node_order)
+    nneighbour = [2,2,2,2,1,1,1,1,1,1,1,1]
+    nneighbour = [nneighbour[i] for i in sort_idx]
+    ho_tensors = get_harmonic_oscillator_orbitals(physical_dim, omega, orb_state)
+    # ho_tensors = [ho_tensors[i] for i in sort_idx]
+    m = orb_state.shape[0]
+
+    if orb_state.shape[0] == 1:
+        for i in range(nsite):
+            ho_tensors[i] = ho_tensors[i].reshape(-1,1)
+    for i in range(nsite):
+        ho_tensors[i] = single_voxel_block_diag(ho_tensors[i], nneighbour[i])     
+        ho_tensors[i] = ho_tensors[i].astype(dtype) 
+
+    # sort_idx = node_order #np.argsort(node_order)
+    # ho_tensors = [ho_tensors[i] for i in sort_idx]
+    
+    nodes = [(Node(tensor=ho_tensor, identifier="site"+str(i)), ho_tensor) for i, ho_tensor in enumerate(ho_tensors)]
+    
+    shapes_ancillary = [[m,m,m,1],[m,m,m,1],[m,m,m,1],[m,m,m,1],[m,m,m,1],[m,m,m,1]]
+    nodes.extend([random_tensor_node(shape, identifier="site"+str(i+nsite), dtype=dtype)
+             for i, shape in enumerate(shapes_ancillary)])
+    
+    node_mapping = create_node_mapping(node_order)
+    random_ttns = TTNS()
+    # random_ttns.add_root(nodes[node_mapping[0]][0], nodes[node_mapping[0]][1])
+    random_ttns.add_root(nodes[12][0], nodes[12][1])
+    random_ttns.add_child_to_parent(nodes[13][0], nodes[13][1], 0, "site12", 0)
+    random_ttns.add_child_to_parent(nodes[node_mapping[0]][0], nodes[node_mapping[0]][1],0, "site12", 1)
+    random_ttns.add_child_to_parent(nodes[node_mapping[1]][0], nodes[node_mapping[1]][1], 0, "site12", 2)
+    random_ttns.add_child_to_parent(nodes[node_mapping[2]][0], nodes[node_mapping[2]][1],0, "site13", 1)
+    random_ttns.add_child_to_parent(nodes[node_mapping[3]][0], nodes[node_mapping[3]][1], 0, "site13", 2)
+    random_ttns.add_child_to_parent(nodes[14][0], nodes[14][1], 0, f"site{node_mapping[0]}", 1)
+    random_ttns.add_child_to_parent(nodes[15][0], nodes[15][1], 0, f"site{node_mapping[1]}", 1)
+    random_ttns.add_child_to_parent(nodes[16][0], nodes[16][1], 0, f"site{node_mapping[2]}", 1)
+    random_ttns.add_child_to_parent(nodes[17][0], nodes[17][1], 0, f"site{node_mapping[3]}", 1)
+    random_ttns.add_child_to_parent(nodes[node_mapping[4]][0], nodes[node_mapping[4]][1], 0, "site14", 1)
+    random_ttns.add_child_to_parent(nodes[node_mapping[5]][0], nodes[node_mapping[5]][1], 0, "site14", 2)
+    random_ttns.add_child_to_parent(nodes[node_mapping[6]][0], nodes[node_mapping[6]][1], 0, "site15", 1)
+    random_ttns.add_child_to_parent(nodes[node_mapping[7]][0], nodes[node_mapping[7]][1], 0, "site15", 2)
+    random_ttns.add_child_to_parent(nodes[node_mapping[8]][0], nodes[node_mapping[8]][1], 0, "site16", 1)
+    random_ttns.add_child_to_parent(nodes[node_mapping[9]][0], nodes[node_mapping[9]][1], 0, "site16", 2)
+    random_ttns.add_child_to_parent(nodes[node_mapping[10]][0], nodes[node_mapping[10]][1], 0, "site17", 1)
+    random_ttns.add_child_to_parent(nodes[node_mapping[11]][0], nodes[node_mapping[11]][1], 0, "site17", 2)
     random_ttns.canonical_form(random_ttns.root_id, mode=SplitMode.KEEP)
     random_ttns.normalize()
     return random_ttns

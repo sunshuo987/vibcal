@@ -14,7 +14,9 @@ from pytreenet.dmrg.lobpcg import lobpcg_block, precond_lobpcg
 
 from potentials import get_potential_energy_CH3CN, get_potential_energy_CH3CN_harmonic
 from utils import get_orbitals_indices_first, get_energy_clusters, get_ttno
-from utils_ch3cn import random_mps_harmonic_oscillator_0, random_threetree_harmonic_oscillator_0, random_leafonly_harmonic_oscillator_0
+from utils_ch3cn import random_mps_harmonic_oscillator_0, random_threetree_harmonic_oscillator_0, \
+    random_leafonly_harmonic_oscillator_0, random_fork_tree, random_t3ns_harmonic_oscillator,\
+    random_twin_tree_harmonic_oscillator
 
 np.random.seed=42
 
@@ -47,9 +49,24 @@ def run_calculation(state_type='mps', max_bond_dim=10, file_path="./Results/ch3c
         elif state_type == 'leafonly':  # leafonly
             states.append(random_leafonly_harmonic_oscillator_0(N, omega, orb_state[i].reshape(1,-1),node_order))
             states[-1].canonical_form(states[-1].root_id)
+        elif state_type == 'fork3':  # fork tree
+            states.append(random_fork_tree(N, omega, orb_state[i].reshape(1,-1), node_order, nbranch=3))
+            states[-1].canonical_form(states[-1].root_id)
+        elif state_type == 'fork4':  # fork tree with 4 branches
+            states.append(random_fork_tree(N, omega, orb_state[i].reshape(1,-1), node_order, nbranch=4))
+            states[-1].canonical_form(states[-1].root_id)
+        elif state_type == 'fork6':  # fork tree with 6 branches
+            states.append(random_fork_tree(N, omega, orb_state[i].reshape(1,-1), node_order, nbranch=6))
+            states[-1].canonical_form(states[-1].root_id)
+        elif state_type == 't3ns':  # t3ns
+            node_order = [0,1,6,7,3,8,9,2,4,5,10,11] # t3ns new node order
+            states.append(random_t3ns_harmonic_oscillator(N, omega, orb_state[i].reshape(1,-1), node_order))
+            states[-1].canonical_form(states[-1].root_id)
+        elif state_type == 'twin':
+            states.append(random_twin_tree_harmonic_oscillator(N, omega, orb_state[i].reshape(1,-1), node_order))
+            states[-1].canonical_form(states[-1].root_id)
         else:
             raise ValueError(f"State type {state_type} not supported")
-        
     ttno, ham_pad = get_ttno(N, states[0], get_potential_energy_CH3CN, True) # get the TTNO and the Hamiltonian
 
     shift_term = (Fraction(-9), "1", TensorProduct({'site0':'I9','site1':'I7','site2':'I9','site3':'I9','site4':'I9','site5':'I9','site6':'I7','site7':'I7','site8':'I9','site9':'I9','site10':'I27','site11':'I27'}))
@@ -103,9 +120,9 @@ def run_calculation(state_type='mps', max_bond_dim=10, file_path="./Results/ch3c
 
 def main():
     # Run for both MPS and threetree with separate profiling
-    file_path = "./Results_test_0219/ch3cn"
-    for max_bond_dim in [8, 12]:
-        for state_type in ['mps', 'threetree', 'leafonly']:
+    file_path = "./Results_test_ttno/ch3cn"
+    for max_bond_dim in [8,12]:
+        for state_type in ['mps', 'threetree', 'leafonly','fork3','fork4', 'fork6','t3ns']:
             try:
                 print(f"\nRunning calculation for {state_type} with max bond dim {max_bond_dim}...")
                 profiler = cProfile.Profile()

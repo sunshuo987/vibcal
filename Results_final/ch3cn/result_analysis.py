@@ -3,6 +3,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import os
 from pathlib import Path
+import pstats
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 
@@ -27,18 +28,26 @@ def collect_energy_tables(base_dir=None, output_file='collected_energies.csv'):
     
     # Paths to the energy files
     files_lobpcg = {
-        'MPS_LOBPCG_8': base_path / 'mps' / 'max_bond_dim_8' / 'lobpcg_energies.csv',
-        'ThreeTree_LOBPCG_8': base_path / 'threetree' / 'max_bond_dim_8' / 'lobpcg_energies.csv',
-        'LeafOnly_LOBPCG_8': base_path / 'leafonly' / 'max_bond_dim_8' / 'lobpcg_energies.csv',
+        # 'MPS_LOBPCG_8': base_path / 'mps' / 'max_bond_dim_8' / 'lobpcg_energies.csv',
+        # 'ThreeTree_LOBPCG_8': base_path / 'threetree' / 'max_bond_dim_8' / 'lobpcg_energies.csv',
+        # 'LeafOnly_LOBPCG_8': base_path / 'leafonly' / 'max_bond_dim_8' / 'lobpcg_energies.csv',
         'MPS_LOBPCG_12': base_path / 'mps' / 'max_bond_dim_12' / 'lobpcg_energies.csv',     
         'ThreeTree_LOBPCG_12': base_path / 'threetree' / 'max_bond_dim_12' / 'lobpcg_energies.csv',       
         'LeafOnly_LOBPCG_12': base_path / 'leafonly' / 'max_bond_dim_12' / 'lobpcg_energies.csv',
+        'Fork3_LOBPCG_12': base_path / 'fork3' / 'max_bond_dim_12' / 'lobpcg_energies.csv',
+        'Fork4_LOBPCG_12': base_path / 'fork4' / 'max_bond_dim_12' / 'lobpcg_energies.csv',
+        'Fork6_LOBPCG_12': base_path / 'fork6' / 'max_bond_dim_12' / 'lobpcg_energies.csv',
+        'T3NS_LOBPCG_12': base_path / 't3ns' / 'max_bond_dim_12' / 'lobpcg_energies.csv',
     }
     
     files_ii = {
         'MPS_II_20': base_path / 'mps' / 'max_bond_dim_12' / 'inverse_iteration_energies_20.csv',
         'ThreeTree_II_20': base_path / 'threetree' / 'max_bond_dim_12' / 'inverse_iteration_energies_20.csv',
         'LeafOnly_II_20': base_path / 'leafonly' / 'max_bond_dim_12' / 'inverse_iteration_energies_20.csv',
+        'Fork3_II_20': base_path / 'fork3' / 'max_bond_dim_12' / 'inverse_iteration_energies_20.csv',
+        'Fork4_II_20': base_path / 'fork4' / 'max_bond_dim_12' / 'inverse_iteration_energies_20.csv',
+        'Fork6_II_20': base_path / 'fork6' / 'max_bond_dim_12' / 'inverse_iteration_energies_20.csv',
+        'T3NS_II_20': base_path / 't3ns' / 'max_bond_dim_12' / 'inverse_iteration_energies_20.csv',
     }
     # Initialize raw results dictionary (variable lengths)
     results_raw = {**{key: [] for key in files_lobpcg.keys()}, **{key: [] for key in files_ii.keys()}}
@@ -58,7 +67,7 @@ def collect_energy_tables(base_dir=None, output_file='collected_energies.csv'):
             # Read CSV without headers and extract last column (converged energies)
             data = np.loadtxt(filepath, delimiter=",",dtype=complex)
             converged_energies = data[:, -1].real # Last column
-            results_raw[key] = converged_energies
+            results_raw[key] = np.sort(converged_energies)
             # print(f"Loaded {len(converged_energies)} energy levels from {key}")
         else:
             print(f"Warning: File not found: {filepath}")
@@ -113,19 +122,35 @@ def analyze_mean_errors(base_dir=None, ref_file=None):
     collected_df = collect_energy_tables(base_path)
     
     # Calculate statistics for each method
-    methods = ['MPS_LOBPCG_8', 'ThreeTree_LOBPCG_8', 'LeafOnly_LOBPCG_8', 'MPS_LOBPCG_12', 'ThreeTree_LOBPCG_12', 'LeafOnly_LOBPCG_12', 'MPS_II_20', 'ThreeTree_II_20', 'LeafOnly_II_20']
+    methods = ['MPS_LOBPCG_8', 'ThreeTree_LOBPCG_8', 'LeafOnly_LOBPCG_8', 
+               'MPS_LOBPCG_12', 'ThreeTree_LOBPCG_12', 'LeafOnly_LOBPCG_12', 
+               'Fork3_LOBPCG_12', 'Fork4_LOBPCG_12', 'Fork6_LOBPCG_12', 'T3NS_LOBPCG_12',
+               'MPS_II_20', 'ThreeTree_II_20', 'LeafOnly_II_20',
+               'Fork3_II_20', 'Fork4_II_20', 'Fork6_II_20', 'T3NS_II_20']
     analysis_results = []
     
     for method in methods:
         if method in collected_df.columns and len(collected_df[method]) > 0:
             calc_energies = collected_df[method].values
             min_len = min(len(calc_energies), len(collected_df['Ref']))
-            
+            treetype = method.split('_')[0].lower()
+            opm  = method.split('_')[1].lower()
+            max_bond_dim = int(method.split('_')[2])
+            if opm == 'lobpcg':
+                profile_file = base_path / f"{treetype}/max_bond_dim_{12}/profile_output.prof"
+            elif opm == 'ii':
+                profile_file = base_path / f"{treetype}/max_bond_dim_{12}/profile_output_ii_20.prof"
+            else:
+                runtime = 0
+                raise Warning("Runtime cannot be extracted!")
+
+            stat = pstats.Stats(str(profile_file))
+            runtime =  stat.total_tt
             if min_len > 0:
                 errors = calc_energies[:min_len] - collected_df['Ref'][:min_len]
                 
                 result = {
-                    'Method': method,
+                    'Method': opm,
                     'Tree_Type': method.split('_')[0],
                     'Bond_Dimension': int(method.split('_')[2]),
                     'Num_States': min_len,
@@ -134,13 +159,14 @@ def analyze_mean_errors(base_dir=None, ref_file=None):
                     'Max_Error': np.max(errors),
                     'Min_Error': np.min(errors),
                     'Std_Error': np.std(errors),
-                    'Mean_Relative_Error': np.mean(errors / collected_df['Ref'][:min_len]) * 100  # in %
+                    'Mean_Relative_Error': np.mean(errors / collected_df['Ref'][:min_len]) * 100,  # in %
+                    'Runtime': runtime
                 }
                 analysis_results.append(result)
     
     # Create analysis DataFrame
     analysis_df = pd.DataFrame(analysis_results)
-    
+    runtime_df = get_runtime_analysis(base_dir)
     # Save analysis results
     analysis_file = base_path / 'error_analysis.csv'
     print("Saving analysis results to:", analysis_file)
@@ -174,18 +200,27 @@ def plot_all_energies(base_dir=None):
     data_all = collect_energy_tables(base_path)
     plt.figure(figsize=(12, 8))
     colors = plt.get_cmap("tab20").colors
-    plt.plot(data_all["Energy_Level"], abs(data_all["MPS_LOBPCG_12"]-data_all["Ref"]), 'o', color=colors[0], label='MPS (LOBPCG)', markersize=6, linewidth=1)
-    plt.plot(data_all["Energy_Level"], abs(data_all["ThreeTree_LOBPCG_12"]-data_all["Ref"]), 's', color=colors[2], label='T3NS (LOBPCG)', markersize=6, linewidth=1)
-    plt.plot(data_all["Energy_Level"], abs(data_all["LeafOnly_LOBPCG_12"]-data_all["Ref"]), 'd', color=colors[4], label='LeafOnly (LOBPCG)', markersize=6, linewidth=1)
-    plt.plot(data_all["Energy_Level"], abs(data_all["MPS_II_20"]-data_all["Ref"]), 'o', color=colors[1], label='MPS (II)', markersize=6, linewidth=1)
-    plt.plot(data_all["Energy_Level"], abs(data_all["ThreeTree_II_20"]-data_all["Ref"]), 's', color=colors[3], label='T3NS (II)', markersize=6, linewidth=1)
-    plt.plot(data_all["Energy_Level"], abs(data_all["LeafOnly_II_20"]-data_all["Ref"]), 'd', color=colors[5], label='LeafOnly (II)', markersize=6, linewidth=1)
+    plt.plot(data_all["Energy_Level"], abs(data_all["MPS_LOBPCG_12"]-data_all["Ref"]), 'o', color=colors[1], markersize=6, linewidth=1)
+    plt.plot(data_all["Energy_Level"], abs(data_all["ThreeTree_LOBPCG_12"]-data_all["Ref"]), 's', color=colors[3], markersize=6, linewidth=1)
+    plt.plot(data_all["Energy_Level"], abs(data_all["LeafOnly_LOBPCG_12"]-data_all["Ref"]), 'd', color=colors[5], markersize=6, linewidth=1)
+    plt.plot(data_all["Energy_Level"], abs(data_all["Fork3_LOBPCG_12"]-data_all["Ref"]), '^', color=colors[7], markersize=6, linewidth=1)
+    plt.plot(data_all["Energy_Level"], abs(data_all["Fork4_LOBPCG_12"]-data_all["Ref"]), 'v', color=colors[9], markersize=6, linewidth=1)
+    plt.plot(data_all["Energy_Level"], abs(data_all["Fork6_LOBPCG_12"]-data_all["Ref"]), '*', color=colors[11], markersize=6, linewidth=1)
+    plt.plot(data_all["Energy_Level"], abs(data_all["T3NS_LOBPCG_12"]-data_all["Ref"]), 'x', color=colors[13], markersize=6, linewidth=1)
+    
+    plt.plot(data_all["Energy_Level"], abs(data_all["MPS_II_20"]-data_all["Ref"]), 'o', color=colors[0], label='MPS', markersize=6, linewidth=1)
+    plt.plot(data_all["Energy_Level"], abs(data_all["ThreeTree_II_20"]-data_all["Ref"]), 's', color=colors[2], label='T Tree', markersize=6, linewidth=1)
+    plt.plot(data_all["Energy_Level"], abs(data_all["LeafOnly_II_20"]-data_all["Ref"]), 'd', color=colors[4], label='Leaf Only', markersize=6, linewidth=1)
+    plt.plot(data_all["Energy_Level"], abs(data_all["Fork3_II_20"]-data_all["Ref"]), '^', color=colors[6], label='Fork-3', markersize=6, linewidth=1)
+    plt.plot(data_all["Energy_Level"], abs(data_all["Fork4_II_20"]-data_all["Ref"]), 'v', color=colors[8], label='Fork-4', markersize=6, linewidth=1)
+    plt.plot(data_all["Energy_Level"], abs(data_all["Fork6_II_20"]-data_all["Ref"]), '*', color=colors[10], label='Fork-6', markersize=6, linewidth=1)
+    plt.plot(data_all["Energy_Level"], abs(data_all["T3NS_II_20"]-data_all["Ref"]), 'x', color=colors[12], label='Full T3NS', markersize=6, linewidth=1)
     plt.plot(data_all["Energy_Level"], np.ones(len(data_all["Energy_Level"])), '--', color='black', label='Tolerance', markersize=4, linewidth=1)
     plt.xlabel('Energy Level', fontsize=18)
     plt.ylabel('Energy Error (cm-1)', fontsize=18)
     plt.yscale('log')
     # plt.title('All Energies', fontsize=14)
-    plt.legend(fontsize=18)
+    plt.legend(fontsize=18, loc='lower left',ncol=4)
     plt.xticks(fontsize=18)
     plt.yticks(fontsize=18)
     plt.tight_layout()
@@ -194,17 +229,24 @@ def plot_all_energies(base_dir=None):
     
 def table2latex(base_dir=None):
     base_path = Path(base_dir) if base_dir is not None else SCRIPT_DIR
-    data_all = pd.read_csv(base_path / 'collected_energies.csv', header=0)
-    colunm_methods = ["MPS_LOBPCG","ThreeTree_LOBPCG","LeafOnly_LOBPCG","MPS_II","ThreeTree_II","LeafOnly_II"]
+    data_all = pd.read_csv(base_path / 'collected_energies.csv', header=0);print(data_all.columns)
+    colunm_methods = ["MPS_LOBPCG_12","ThreeTree_LOBPCG_12","LeafOnly_LOBPCG_12",
+                      "Fork3_LOBPCG_12","Fork4_LOBPCG_12","Fork6_LOBPCG_12","T3NS_LOBPCG_12",
+                      "MPS_II_20","ThreeTree_II_20","LeafOnly_II_20",
+                      "Fork3_II_20","Fork4_II_20","Fork6_II_20","T3NS_II_20"]
     columns = ["Energy_Level","Ref"]+colunm_methods
     data_all = data_all[columns]
-    print(data_all)
+    # print(data_all)
+
     for col in colunm_methods:
         data_all[col] = data_all[col]-data_all["Ref"]
         print(f"{col}: mean error: {data_all[col].mean():.3f}")
         print(f"{col}: std error: {data_all[col].std():.3f}")
-    latex = data_all.to_latex(index=False,float_format="%.3f")   # <-- now it returns a string
-    cols = data_all.columns[-6:-3]
+    # latex = data_all.to_latex(index=False,float_format="%.3f")   # <-- now it returns a string
+    cols = data_all.columns[:-7]
+    data_latex = pd.concat([data_all.iloc[:, :2], data_all.iloc[:, -7:]], axis=1).round(3).to_latex(index=False, float_format="%.3f")
+    # data_latex =  data_all.iloc[:,-7:].round(3).to_latex(index=False, float_format="%.3f")
+    print("LaTeX table is :", data_latex)
 
     # find column with minimum absolute value (row-wise)
     winners = data_all[cols].round(3).abs().idxmin(axis=1)
@@ -223,18 +265,62 @@ def table2latex(base_dir=None):
     min_counts = is_min.sum()
 
     print(min_counts)
+
+def get_runtime(treetype: str, method: str, max_bond_dim: int, base_dir=None):
+    base_path = Path(base_dir) if base_dir is not None else SCRIPT_DIR
+    if method == 'lobpcg':
+        profile_file = base_path / f"{treetype}/max_bond_dim_{max_bond_dim}/profile_output.prof"
+    elif method == 'ii':
+        profile_file = base_path / f"{treetype}/max_bond_dim_{max_bond_dim}/profile_output_ii_20.prof"
+    else:
+        raise ValueError("Method must be 'lobpcg' or 'ii'")
+    stat = pstats.Stats(str(profile_file))
+    runtime =  stat.total_tt
+    # print(f"Total runtime for {treetype} with max bond dim {max_bond_dim} using {method}: {runtime:.2f} seconds")
+    return runtime
+
+def get_runtime_analysis(base_dir=None):
+    base_path = Path(base_dir) if base_dir is not None else SCRIPT_DIR
+    treetypes = ['mps', 'threetree', 'leafonly', 'fork3', 'fork4', 'fork6', 't3ns']
+    methods = ['lobpcg', 'ii']
+    max_bond_dim = 12
+    runtime_results = []
     
-    # print(latex)
+    for treetype in treetypes:
+        for method in methods:
+            runtime = get_runtime(treetype, method, max_bond_dim, base_path)
+            runtime_results.append({
+                'Tree_Type': treetype,
+                'Method': method,
+                'Max_Bond_Dim': max_bond_dim,
+                'Runtime_sec': runtime
+            })
+    
+    runtime_df = pd.DataFrame(runtime_results)
+    print("\nRuntime Analysis Results:")
+    print(runtime_df)
+    return runtime_df
+
 if __name__ == "__main__":
 
     print("\nAnalyzing mean errors...")
     analysis = analyze_mean_errors()
+    # print(analysis)
+    # table = analysis.set_index(["Method", "Tree_Type"]).sort_index()
+    # table = table.reindex(['lobpcg', 'ii'], level='Method')
+    # table = table.reindex(['MPS', 'ThreeTree', 'LeafOnly', 'Fork3', 'Fork4', 'Fork6', 'T3NS'], level='Tree_Type')
+    # table_2 = table[['Bond_Dimension', 'Mean_Error', 'Runtime']]
+    # print(table_2.round(3).to_latex(float_format="%.3f"))
+
     
     # print("Collecting all energies...")
     # collect_all_energies()
     
-    print("Plotting all energies...")
-    plot_all_energies()
+    # print("Plotting all energies...")
+    # plot_all_energies()
     
     # print("Generating LaTeX table...")
-    # table2latex()
+    table2latex()
+
+    # get_runtime_analysis()
+

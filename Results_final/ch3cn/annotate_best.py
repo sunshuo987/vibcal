@@ -155,8 +155,8 @@ def annotate_best_in_table(
 
 def main() -> None:
     SCRIPT_DIR = Path(__file__).resolve().parent
-    input_path = SCRIPT_DIR / 'table.txt'
-    output_path = SCRIPT_DIR / 'table_annotated.tex'
+    input_path = SCRIPT_DIR / 'table_ii.txt'
+    output_path = SCRIPT_DIR / 'table_ii_annotated.tex'
     annotate_best_in_table(
         input_path=input_path,
         output_path=output_path,
